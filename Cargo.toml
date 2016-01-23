@@ -5,3 +5,6 @@ authors = ["Sushant <sushant.dinesh94@gmail.com>"]
 
 [dependencies]
 petgraph = "*"
+
+[dependencies.radeco-lib]
+path = "../radeco-lib/"

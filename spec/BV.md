@@ -13,6 +13,7 @@ BitVector:
 	* Array Slicing
 	* Sign Extend
 	* Zero Extend
+	* Concat
 
 Additionally, it must also support two other operations:
 	* Yeild - Write out the SMT-LIB2 Formula for the AST

@@ -1,11 +1,17 @@
 //! Module that defines BV (BitVector) and the operations needed to operate on
 //! them.
 
-use petgraph::graph::Graph;
+// META TODO LIST:
+//   * Make BV into a Trait. Decide the methods it needs to implement.
+//   * Implement methods for BitVectorSymbol (BVS)
+
+use petgraph::graph::{Graph, NodeIndex};
 use std::convert::Into;
 use std::ops::{Add, BitAnd, BitOr, BitXor, Div, Mul, Not, Rem, Shl, Shr, Sub};
 use std::{u8, u16, u32, u64};
 use std::ops::Range;
+use std::rc::Rc;
+use std::cell::RefCell;
 
 /// BitVectorValue (BVV) represents a concrete value
 #[derive(Copy, Clone, Debug, Hash, PartialEq)]
@@ -42,10 +48,27 @@ impl BVV {
 /// BitVectorSymbol (BVS) represents a symbolic value
 #[derive(Clone, Debug)]
 pub struct BVS {
-    /// Optional name for the symbolic var
+    /// Optional name for the symbolic var.
     name: Option<String>,
-    /// Index that represents the root for this symbolic var
-    ast: Graph<usize, usize>,
+    /// The ast (symbol space) this var belongs to.
+    ast: Rc<RefCell<Graph<usize, usize>>>,
+    /// Index of this node.
+    index: NodeIndex,
+}
+
+pub trait BitVector: BitVecValue + BitVecSymbol { }
+pub trait BitVecValue: Add + BitAnd + BitOr + BitXor + Div + Mul + Not + Rem + Shl <Self> + Shr<Self> + Sub + Symbolize + Sized { }
+pub trait BitVecSymbol: Add + BitAnd + BitOr + BitXor + Div + Mul + Not + Rem + Shl<Self> + Shr<Self> + Sub + Concretize + Sized { }
+
+/// Traits to convert between symbolic and concrete BitVector types
+pub trait Concretize {
+    type Output: BitVecValue;
+    fn to_concrete(&self) -> Self::Output;
+}
+
+pub trait Symbolize {
+    type Output: BitVecSymbol;
+    fn to_symbol(&self) -> Self::Output;
 }
 
 macro_rules! bvv_binop {
@@ -176,10 +199,35 @@ impl BVV {
     }
 }
 
-///////////////////////////////////////////////////////////////////////////////
-//// Trait implementations for BVS
-///////////////////////////////////////////////////////////////////////////////
+// Implement some methods on BVS directly to allow implementation of required traits easily for
+// of BVS.
+impl BVS {
+    pub fn new(symbol_space: Rc<RefCell<Graph<usize, usize>>>, name: Option<String>, d: usize) -> BVS {
+        let index = {
+            symbol_space.borrow_mut().add_node(d)
+        };
+        BVS {
+            ast: symbol_space,
+            name: name,
+            index: index,
+        }
+    }
 
+    pub fn add_op(&mut self, rhs: &BVS, op: usize) -> BVS {
+        let new_node = BVS::new(self.ast.clone(), None, op);
+        self.ast.borrow_mut().add_edge(new_node.index, self.index, 0);
+        self.ast.borrow_mut().add_edge(new_node.index, rhs.index, 1);
+        new_node
+    }
+}
+
+// Trait implementations for BVS.
+impl Add for BVS {
+    type Output = BVS;
+    fn add(self, rhs: BVS) -> BVS {
+        unimplemented!()
+    }
+}
 
 #[cfg(test)]
 mod test {
