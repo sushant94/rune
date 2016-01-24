@@ -8,3 +8,9 @@ petgraph = "*"
 
 [dependencies.radeco-lib]
 path = "../radeco-lib/"
+
+[dependencies.esil]
+path = "../esil-rs/"
+
+[dependencies.r2pipe]
+path = "../r2pipe.rs/"

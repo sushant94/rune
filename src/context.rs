@@ -13,6 +13,7 @@
 
 use std::io::Write;
 use bv::BitVector;
+use std::hash::Hash;
 
 /// Ri - Register Index. Used if context implementation uses Indexes to reference registers.
 /// Mi - Memory Index. Used if the underlying context implementation uses indexes for reference.
@@ -34,7 +35,7 @@ pub type ContextResult<T> = Result<T, ContextError>;
 
 pub trait Context: Clone {
     type T: BitVector;
-    type I: Clone;
+    type I: Clone + Hash + Eq;
 
     fn new() -> Self;
 
