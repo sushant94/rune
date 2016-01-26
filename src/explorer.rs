@@ -13,8 +13,8 @@ pub trait InstructionStream {
 }
 
 // TODO
-pub struct r2stream;
-impl InstructionStream for r2stream {
+pub struct R2Stream;
+impl InstructionStream for R2Stream {
     type Output = LOpInfo;
     type Index = String;
 

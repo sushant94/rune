@@ -12,6 +12,7 @@ use std::{u8, u16, u32, u64};
 use std::ops::Range;
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::fmt::Debug;
 
 /// BitVectorValue (BVV) represents a concrete value
 #[derive(Copy, Clone, Debug, Hash, PartialEq)]
@@ -56,9 +57,43 @@ pub struct BVS {
     index: NodeIndex,
 }
 
-pub trait BitVector: BitVecValue + BitVecSymbol { }
-pub trait BitVecValue: Add + BitAnd + BitOr + BitXor + Div + Mul + Not + Rem + Shl <Self> + Shr<Self> + Sub + Symbolize + Sized { }
-pub trait BitVecSymbol: Add + BitAnd + BitOr + BitXor + Div + Mul + Not + Rem + Shl<Self> + Shr<Self> + Sub + Concretize + Sized { }
+pub trait BitVector: BitVecValue + BitVecSymbol { 
+    fn eq(&self, &Self) -> Self;
+    fn lt(&self, &Self) -> Self;
+    fn gt(&self, &Self) -> Self;
+}
+
+pub trait BitVecValue: Add<Output=Self>
+                       + BitAnd<Output=Self>
+                       + BitOr<Output=Self>
+                       + BitXor<Output=Self>
+                       + Div<Output=Self>
+                       + Mul<Output=Self>
+                       + Not<Output=Self>
+                       + Rem<Output=Self>
+                       + Shl <Self, Output=Self>
+                       + Shr<Self, Output=Self>
+                       + Sub<Self, Output=Self>
+                       + Symbolize
+                       + Clone
+                       + Debug
+                       + Sized { }
+
+pub trait BitVecSymbol: Add<Output=Self>
+                       + BitAnd<Output=Self>
+                       + BitOr<Output=Self>
+                       + BitXor<Output=Self>
+                       + Div<Output=Self>
+                       + Mul<Output=Self>
+                       + Not<Output=Self>
+                       + Rem<Output=Self>
+                       + Shl<Self, Output=Self>
+                       + Shr<Self, Output=Self>
+                       + Sub<Self, Output=Self>
+                       + Concretize
+                       + Clone
+                       + Debug
+                       + Sized { }
 
 /// Traits to convert between symbolic and concrete BitVector types
 pub trait Concretize {

@@ -11,8 +11,8 @@ pub enum EngineError {
 pub type EngineResult<T> = Result<T, EngineError>;
 
 pub trait Engine: Sized {
-    type C: Context;
-    type P: PathExplorer;
+    type Ctx: Context;
+    type Exp: PathExplorer;
 
     fn new<T: Configure<For=Self>>() -> Self;
     fn run(&mut self) -> EngineResult<()>;
