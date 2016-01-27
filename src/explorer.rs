@@ -29,7 +29,10 @@ impl InstructionStream for R2Stream {
 
 pub trait PathExplorer {
     type I: InstructionStream;
+    type C: Clone + Debug;
 
     fn new() -> Self;
     fn next<C: Context>(&mut self, &mut C) -> Option<<Self::I as InstructionStream>::Output>;
+
+    fn register_branch<C: Context>(&mut self, C::BV, &mut C) -> Self::C;
 }

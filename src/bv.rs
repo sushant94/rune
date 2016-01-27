@@ -61,6 +61,11 @@ pub trait BitVector: BitVecValue + BitVecSymbol {
     fn eq(&self, &Self) -> Self;
     fn lt(&self, &Self) -> Self;
     fn gt(&self, &Self) -> Self;
+
+    fn is_concrete(&self) -> bool;
+    fn is_symbolic(&self) -> bool {
+        !self.is_concrete()
+    }
 }
 
 pub trait BitVecValue: Add<Output=Self>
@@ -75,6 +80,7 @@ pub trait BitVecValue: Add<Output=Self>
                        + Shr<Self, Output=Self>
                        + Sub<Self, Output=Self>
                        + Symbolize
+                       + Into<u64>
                        + Clone
                        + Debug
                        + Sized { }
