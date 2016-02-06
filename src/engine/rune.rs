@@ -2,9 +2,12 @@
 
 use std::collections::HashMap;
 
+use r2pipe::structs::LOpInfo;
+
 use context::{Context, RefType};
 use bv::BitVector;
-use explorer::{InstructionStream, PathExplorer, R2Stream};
+use explorer::explorer::PathExplorer;
+use stream::{InstructionStream};
 use engine::engine::{Configure, Engine, EngineResult};
 use esil::lexer::{Token, Tokenizer};
 use esil::parser::{Parse, Parser};
@@ -12,14 +15,19 @@ use esil::parser::{Parse, Parser};
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum RuneControl {
     Continue,
+    TerminatePath,
+    ExploreTrue,
+    ExploreFalse,
     Skip,
     Halt,
     Break,
 }
 
-pub struct Rune<Ctx, Exp>
+pub struct Rune<Ctx, Exp, S>
     where Ctx: Context,
-          Exp: PathExplorer
+          Exp: PathExplorer,
+          S: InstructionStream<Output = LOpInfo, Index = u64>
+
 {
     /// Context on which the instance of rune operates on
     ctx: Ctx,
@@ -28,23 +36,24 @@ pub struct Rune<Ctx, Exp>
     /// Stores values that are intermediates during symbolic execution. These are not
     /// a part of register or memory
     intermediates: Vec<Ctx::BV>,
-    /// Instruction pointer
-    ip: u64,
+    stream: S,
 }
 
-impl<Ctx, Exp> Configure for Rune<Ctx, Exp>
+impl<Ctx, Exp, S> Configure for Rune<Ctx, Exp, S>
 where Ctx: Context<Idx = RefType<usize, usize>>,
-      Exp: PathExplorer<I = R2Stream, C = RuneControl>
+      Exp: PathExplorer<C = RuneControl, Ctx = Ctx>,
+      S: InstructionStream<Output = LOpInfo, Index = u64>
 {
-    type For = Rune<Ctx, Exp>;
-    fn configure(_: &mut Rune<Ctx, Exp>) -> EngineResult<()> {
+    type For = Rune<Ctx, Exp, S>;
+    fn configure(_: &mut Rune<Ctx, Exp, S>) -> EngineResult<()> {
         unimplemented!()
     }
 }
 
-impl<Ctx, Exp> Rune<Ctx, Exp>
+impl<Ctx, Exp, S> Rune<Ctx, Exp, S>
 where Ctx: Context<Idx = RefType<usize, usize>>,
-      Exp: PathExplorer<I = R2Stream, C = RuneControl>
+      Exp: PathExplorer<C = RuneControl, Ctx = Ctx>,
+      S: InstructionStream<Output = LOpInfo, Index = u64>
 {
     fn process_in(&mut self, t: Option<Token>) -> EngineResult<Option<Ctx::BV>> {
         if t.is_none() {
@@ -57,7 +66,7 @@ where Ctx: Context<Idx = RefType<usize, usize>>,
             }
             Token::EEntry(ref id) => self.intermediates[*id].clone(),
             Token::EConstant(value) => self.ctx.new_value(value),
-            Token::EAddress => self.ctx.new_value(self.ip),
+            Token::EAddress => unimplemented!(),
             _ => panic!("Not an operand"),
         };
         Ok(Some(read))
@@ -84,7 +93,7 @@ where Ctx: Context<Idx = RefType<usize, usize>>,
                 return Ok(None);
             }
             Token::EIf => {
-                *control = self.explorer.register_branch(lhs, &mut self.ctx);
+                *control = self.explorer.register_branch(&mut self.ctx);
                 return Ok(None);
             }
             // TODO: Adjust width
@@ -101,7 +110,7 @@ where Ctx: Context<Idx = RefType<usize, usize>>,
                 return Ok(None);
             }
             Token::ENop => return Ok(None),
-            _ => { }
+            _ => {}
         }
 
         let result = match token {
@@ -149,21 +158,22 @@ where Ctx: Context<Idx = RefType<usize, usize>>,
     }
 }
 
-impl<Ctx, Exp> Engine for Rune<Ctx, Exp>
+impl<Ctx, Exp, S> Engine for Rune<Ctx, Exp, S>
 where Ctx: Context<Idx = RefType<usize, usize>>,
-      Exp: PathExplorer<I = R2Stream, C = RuneControl>
+      Exp: PathExplorer<C = RuneControl, Ctx = Ctx>,
+      S: InstructionStream<Output = LOpInfo, Index = u64>
 {
     type Ctx = Ctx;
     type Exp = Exp;
 
-    fn new<T>() -> Rune<Ctx, Exp>
-        where T: Configure<For = Rune<Ctx, Exp>>
+    fn new<T>() -> Rune<Ctx, Exp, S>
+        where T: Configure<For = Rune<Ctx, Exp, S>>
     {
         let mut rune = Rune {
             ctx: Self::Ctx::new(),
             explorer: Self::Exp::new(),
             intermediates: Vec::new(),
-            ip: 0,
+            stream: S::new(),
         };
 
         {
@@ -174,13 +184,26 @@ where Ctx: Context<Idx = RefType<usize, usize>>,
 
     fn run(&mut self) -> EngineResult<()> {
         let mut p = Parser::init(None);
-        let mut control;
-        while let Some(ref opinfo) = self.explorer.next(&mut self.ctx) {
+        let mut control = RuneControl::Continue;
+
+        loop {
+            let opinfo = if let Some(opinfo_) = self.stream.at(self.ctx.ip()) {
+                opinfo_
+            } else {
+                // Request for a new state from queue.
+                if let Some(action) = self.explorer.next_job(&mut self.ctx) {
+                    self.stream.at(self.ctx.ip()).unwrap()
+                } else {
+                    break;
+                }
+            };
+
             let esil = opinfo.esil.as_ref().unwrap();
-            // Set the instruction pointer to the correct location.
-            self.ip = opinfo.offset.unwrap();
-            // Reset control
-            control = RuneControl::Continue;
+
+            // Increment ip by instruction width
+            let width = opinfo.size.as_ref().unwrap();
+            self.ctx.increment_ip(width);
+
             while let Some(ref token) = p.parse::<_, Tokenizer>(esil) {
                 let (lhs, rhs) = p.fetch_operands(token);
                 let lhs = try!(self.process_in(lhs));
@@ -190,14 +213,21 @@ where Ctx: Context<Idx = RefType<usize, usize>>,
                     p.push(rt);
                 }
 
-                // Decide action based on control.
                 match control {
-                    RuneControl::Continue => {},
-                    RuneControl::Skip => break,
-                    _ => unimplemented!(),
+                    RuneControl::ExploreTrue |
+                    RuneControl::ExploreFalse |
+                    RuneControl::Continue => continue,
+                    _ => break,
                 }
             }
+
+            match self.explorer.next(&mut self.ctx) {
+                RuneControl::Continue => {}
+                _ => unimplemented!(),
+            }
+
         }
+
         Ok(())
     }
 }

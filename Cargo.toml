@@ -5,6 +5,7 @@ authors = ["Sushant <sushant.dinesh94@gmail.com>"]
 
 [dependencies]
 petgraph = "*"
+rustc-serialize = "*"
 
 [dependencies.radeco-lib]
 path = "../radeco-lib/"

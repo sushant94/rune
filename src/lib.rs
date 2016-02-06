@@ -10,14 +10,26 @@
 extern crate petgraph;
 extern crate esil;
 extern crate r2pipe;
-
+extern crate rustc_serialize;
 
 pub mod bv;
 pub mod context;
-pub mod explorer;
+pub mod explorer{
+    pub mod explorer;
+    pub mod dfs;
+    pub mod bfs;
+}
+
 pub mod engine {
     pub mod engine;
     pub mod rune;
     pub mod hook;
     pub mod breakpt;
+}
+
+pub mod stream;
+
+pub mod smt {
+    pub mod smt;
+    pub mod ssmt;
 }

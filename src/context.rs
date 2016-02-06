@@ -67,6 +67,9 @@ pub trait Context: Clone {
 
     fn new_value(&mut self, u64) -> Self::BV;
     fn new_symbol(&mut self) -> Self::BV;
+
+    fn ip(&self) -> u64;
+    fn increment_ip(&mut self, &u64);
 }
 
 #[cfg(test)]
