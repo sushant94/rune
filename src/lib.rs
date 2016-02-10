@@ -11,6 +11,7 @@ extern crate petgraph;
 extern crate esil;
 extern crate r2pipe;
 extern crate rustc_serialize;
+extern crate regex;
 
 pub mod bv;
 pub mod context;
