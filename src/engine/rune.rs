@@ -1,11 +1,9 @@
 //! Trait and struct implementations for rune symbolic engine
 
-use std::collections::HashMap;
-
 use r2pipe::structs::LOpInfo;
 
-use context::{Context, RefType};
-use bv::BitVector;
+use context::context::{Context, RefType};
+use context::bv::BitVector;
 use explorer::explorer::PathExplorer;
 use stream::{InstructionStream};
 use engine::engine::{Configure, Engine, EngineResult};

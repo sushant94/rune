@@ -13,8 +13,13 @@ extern crate r2pipe;
 extern crate rustc_serialize;
 extern crate regex;
 
-pub mod bv;
-pub mod context;
+pub mod context {
+    pub mod context;
+    pub mod context_;
+    pub mod bv;
+    pub mod rcontext;
+}
+
 pub mod explorer{
     pub mod explorer;
     pub mod dfs;

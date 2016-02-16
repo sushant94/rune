@@ -1,12 +1,10 @@
 //! PathExplorer that works by exploring the CFG in Breadth First Order.
 use std::collections::VecDeque;
 
-use r2pipe::structs::LOpInfo;
-
 use explorer::explorer::{PathExplorer};
 use stream::{InstructionStream};
 use engine::rune::RuneControl;
-use context::Context;
+use context::context::Context;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum BranchType {
@@ -46,7 +44,7 @@ where Ctx: Context {
         }
     }
 
-    fn next(&mut self, ctx: &mut Self::Ctx) -> RuneControl {
+    fn next(&mut self, _: &mut Self::Ctx) -> RuneControl {
         // This function is present so that the path explorer can pre-empt the current path,
         // save the context and peform other heuristic analysis. But, since this is a pure BFS,
         // this function does nothing and asks rune to continue with its execution into the next

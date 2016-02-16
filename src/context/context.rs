@@ -19,7 +19,7 @@ use std::io::Write;
 use std::hash::Hash;
 use std::fmt::Debug;
 
-use bv::BitVector;
+use context::bv::BitVector;
 
 /// Ri - Register Index. Used if context implementation uses Indexes to reference registers.
 /// Mi - Memory Index. Used if the underlying context implementation uses indexes for reference.

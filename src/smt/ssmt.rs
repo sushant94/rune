@@ -1,8 +1,7 @@
 //! Module that comtains SMTLib Backend Implementation.
 //!
 //! This backend outputs the constraints in standard smt-lib2 format. Hence,
-//! any solver that
-//! supports this format maybe used to solve for constraints.
+//! any solver that supports this format maybe used to solve for constraints.
 
 use std::process::{Child, Command, Stdio};
 use std::collections::HashMap;
@@ -12,7 +11,6 @@ use regex::Regex;
 use smt::smt::{Logic, SMTBackend, SMTError, SMTResult, Type};
 
 /// Enum that contains the solvers that support SMTLib2 format.
-// This enum can be extended easily in the future to support all solvers that support smtlib2.
 #[derive(Debug, Clone, Copy)]
 pub enum Solver {
     Z3,
@@ -79,14 +77,10 @@ impl SMTLib2 {
 
     pub fn read(&mut self) -> String {
         // XXX: This read may block indefinitely if there is nothing on the pipe to be
-        // read. To
-        // prevent this we need a timeout mechanism after which we should return with
-        // an error,
-        // such as: ErrTimeout.
-        // Another important point to note here is that, if the data available to read
-        // is exactly
-        // 2048 bytes, then this reading mechanism fails and will end up waiting to
-        // read more data
+        // read. To prevent this we need a timeout mechanism after which we should return with
+        // an error, such as: ErrTimeout.
+        // Another important point to note here is that, if the data available to read is exactly
+        // 2048 bytes, then this reading mechanism fails and will end up waiting to read more data
         // (when none is available) indefinitely.
         let mut bytes_read = [0; 2048];
         let mut s = String::new();
@@ -117,23 +111,17 @@ impl SMTBackend for SMTLib2 {
 
     fn set_logic(&mut self, logic: Logic) {
         // Set logic can only be set once in the solver and before  any declaration,
-        // definitions,
-        // assert or check-sat commands. Only exit, option and info commands may
-        // precede a
-        // set-logic command.
+        // definitions, assert or check-sat commands. Only exit, option and info commands may
+        // precede a set-logic command.
         self.write(format!("(set-logic {})\n", logic.to_string()));
     }
 
     fn assert(&mut self, _: Self::Ident, assert: Self::Assertion) {
         // TODO: In the future we may need to perform simplifications and optimizations
-        // on the
-        // queries before sending them to the solver. But currently, in this simple
-        // implementation,
-        // we will just write out the assertions to the solver and let it take care of
-        // the
-        // correctness.
-        // TODO 2: If the assertions result in an error, this must be parsed to a
-        // human-readable
+        // on the queries before sending them to the solver. But currently, in this simple
+        // implementation, we will just write out the assertions to the solver and let it take care of
+        // the correctness.
+        // TODO 2: If the assertions result in an error, this must be parsed to a human-readable
         // form and returned from this function so that the caller may handle it.
         self.write(assert);
     }
@@ -156,8 +144,7 @@ impl SMTBackend for SMTLib2 {
 
         self.write("(get-model)\n".to_owned());
         // XXX: For some reason we need two reads here in order to get the result from
-        // the SMT
-        // solver. Need to look into the reason for this. This might stop working in the
+        // the SMT solver. Need to look into the reason for this. This might stop working in the
         // future.
         let _ = self.read();
         let read_result = self.read();
@@ -194,6 +181,31 @@ impl SMTBackend for SMTLib2 {
 
     fn raw_read(&mut self) -> String {
         self.read()
+    }
+}
+
+/// A trait that is to be implemented on a struct that configures and spawns an SMTBackend.
+pub trait SMTInit {
+    type For: SMTBackend;
+    fn spawn(&self) -> Option<Self::For>;
+}
+
+/// Wrapper struct that is used to spawn an instance of Z3 and wrap it into a `SMTLib2`.
+///
+/// This provides a nice way to configure solvers before spawning an instance of it and a chance to
+/// run commands in the solver before they are used elsewhere.
+///
+/// __TODO__: This has to be expanded to other solvers.
+pub struct SpawnZ3;
+impl SpawnZ3 {
+    pub fn new() -> SpawnZ3 {
+        SpawnZ3
+    }
+}
+
+impl SMTInit<For = SMTLib2> {
+    fn spawn(&self) -> Option<SMTLib2> {
+        Some(SMTLib2::new(Solver::Z3))
     }
 }
 

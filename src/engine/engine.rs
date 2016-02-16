@@ -1,6 +1,6 @@
 //! Defines traits and structs that perform the actual symbolic emulation.
 
-use context::Context;
+use context::context::Context;
 use explorer::explorer::PathExplorer;
 
 #[derive(Clone, Copy, Debug)]

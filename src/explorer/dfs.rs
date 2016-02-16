@@ -2,14 +2,13 @@
 
 use std::collections::VecDeque;
 
-use r2pipe::structs::LOpInfo;
-
 use explorer::explorer::{PathExplorer};
 use engine::rune::RuneControl;
-use context::Context;
+use context::context::Context;
 use stream::{InstructionStream};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[allow(dead_code)]
 enum BranchType {
     True,
     False,
@@ -48,7 +47,7 @@ where Ctx: Context {
     }
 
     // TODO: Terminate the current execution path if the depth is greater than a preset threshold.
-    fn next(&mut self, ctx: &mut Self::Ctx) -> RuneControl {
+    fn next(&mut self, _: &mut Self::Ctx) -> RuneControl {
         RuneControl::Continue
     }
 

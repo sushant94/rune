@@ -1,6 +1,6 @@
 //! Defines traits that guides the symbolic emulator
 
-use context::Context;
+use context::context::Context;
 use std::fmt::Debug;
 
 pub trait PathExplorer {

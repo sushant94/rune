@@ -5,6 +5,8 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fmt;
 
+use smt::ssmt::SMTInit;
+
 #[derive(Clone, Copy, Debug)]
 pub enum SMTError {
     Undefined,
@@ -57,11 +59,11 @@ pub trait SMT {
     type Idx: Clone + Debug;
 
     /// Return one solution
-    fn solve_for<B: SMTBackend>(&Self::Idx, &mut B) -> SMTResult<u64>;
+    fn solve_for<B: SMTInit>(&Self::Idx, &mut B) -> SMTResult<u64>;
     /// Repeatedly query the SMT solver to obtain all possible solutions for a set of constraints.
-    fn solve_all_for<B: SMTBackend>(&Self::Idx, &mut B) -> SMTResult<Vec<u64>>;
+    fn solve_all_for<B: SMTInit>(&Self::Idx, &mut B) -> SMTResult<Vec<u64>>;
     /// Check if the constraints are satisfiable.
-    fn check_sat<B: SMTBackend>(&mut self, &mut B) -> SMTResult<bool>;
+    fn check_sat<B: SMTInit>(&mut self, &mut B) -> SMTResult<bool>;
 }
 
 /// Trait a backend should implement to support SMT solving.
