@@ -4,11 +4,17 @@
 //! any solver that supports this format maybe used to solve for constraints.
 
 use std::process::{Child, Command, Stdio};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write};
+use std::fmt;
 use regex::Regex;
 
+use petgraph::graph::{Graph, NodeIndex};
+use petgraph::EdgeDirection;
+
 use smt::smt::{Logic, SMTBackend, SMTError, SMTResult, Type};
+use smt::bitvec;
+use smt::integer;
 
 /// Enum that contains the solvers that support SMTLib2 format.
 #[derive(Debug, Clone, Copy)]
@@ -54,36 +60,106 @@ impl SMTSolver for Solver {
     }
 }
 
+#[derive(Clone, Debug)]
+pub enum NodeData {
+    FreeVar(String, Type),
+    BVOps(bitvec::OpCodes),
+    IntOps(integer::OpCodes),
+    Const(u64, usize),
+    BVConst(u64, usize),
+}
+
+impl fmt::Display for NodeData {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let s = match *self {
+            NodeData::FreeVar(ref name, _) => name.clone(),
+            NodeData::BVOps(ref opcode) => opcode.to_string(),
+            NodeData::IntOps(ref opcode) => opcode.to_string(),
+            NodeData::Const(ref val, _) => format!("{}", val),
+            NodeData::BVConst(ref val, ref size) => format!("(_ bv{} {})", val, size),
+        };
+        write!(f, "{}", s)
+    }
+}
+
+impl NodeData {
+    pub fn is_opcode(&self) -> bool {
+        match *self {
+            NodeData::BVOps(_) | NodeData::IntOps(_) => true,
+            _ => false,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum EdgeData {
+    EdgeOrder(usize),
+}
+
+pub const RHS: usize = 1;
+pub const LHS: usize = 0;
+
 /// Solver struct that wraps the spawned sub-process.
 pub struct SMTLib2 {
     solver: Option<Child>,
     logic: Option<Logic>,
-
+    gr: Graph<NodeData, EdgeData>,
+    var_index: usize,
+    var_map: HashMap<String, NodeIndex>,
+    idx_map: HashMap<NodeIndex, String>,
 }
 
 impl SMTLib2 {
     pub fn new<T: SMTSolver>(s_type: T) -> SMTLib2 {
-        SMTLib2 {
+        let mut solver = SMTLib2 {
             solver: Some(s_type.exec()),
             logic: None,
-        }
+            gr: Graph::new(),
+            var_index: 0,
+            var_map: HashMap::new(),
+            idx_map: HashMap::new(),
+        };
+
+        // TODO: Re-enable success message.
+        //solver.write("(set-option :print-success true)\n");
+        solver
     }
 
-    pub fn write<T: AsRef<str>>(&mut self, s: T) {
+    pub fn write<T: AsRef<str>>(&mut self, s: T) -> Result<(), String> {
         // TODO: Check for errors.
-        // println!("Writing: {}", s);
         if let Some(ref mut stdin) = self.solver.as_mut().unwrap().stdin.as_mut() {
             stdin.write(s.as_ref().as_bytes()).expect("Write to stdin failed");
             stdin.flush().expect("Failed to flush stdin");
         }
+        Ok(())
+    }
+
+    pub fn read_until(&mut self, delimiter: &str) -> String {
+        let mut s = String::new();
+        let mut bytes_read = [0; 1];
+        if let Some(ref mut solver) = self.solver.as_mut() {
+            if let Some(ref mut stdout) = solver.stdout.as_mut() {
+                loop {
+                    let n = stdout.read(&mut bytes_read).unwrap();
+                    s = format!("{}{}", s, String::from_utf8(bytes_read[0..n].to_vec()).unwrap());
+                    if let Some(_) = s.find(delimiter) {
+                        break;
+                    }
+                }
+            }
+        }
+        s
     }
 
     pub fn read(&mut self) -> String {
         // XXX: This read may block indefinitely if there is nothing on the pipe to be
-        // read. To prevent this we need a timeout mechanism after which we should return with
+        // read. To prevent this we need a timeout mechanism after which we should
+        // return with
         // an error, such as: ErrTimeout.
-        // Another important point to note here is that, if the data available to read is exactly
-        // 2048 bytes, then this reading mechanism fails and will end up waiting to read more data
+        // Another important point to note here is that, if the data available to read
+        // is exactly
+        // 2048 bytes, then this reading mechanism fails and will end up waiting to
+        // read more data
         // (when none is available) indefinitely.
         let mut bytes_read = [0; 2048];
         let mut s = String::new();
@@ -102,36 +178,117 @@ impl SMTLib2 {
         }
         s
     }
+
+    // Recursive function that builds up the assertion string from the tree.
+    pub fn expand_assertion(&self, ni: NodeIndex) -> String {
+        let mut children = self.gr.edges_directed(ni, EdgeDirection::Outgoing).map(|(other, edge)| {
+            match *edge {
+                EdgeData::EdgeOrder(ref i) => (other, *i),
+            }
+        }).collect::<Vec<_>>();
+        children.sort_by(|x, y| (x.1).cmp(&y.1));
+
+        let mut assertion = self.gr[ni].to_string();
+
+        assertion = if self.gr[ni].is_opcode() {
+            format!("({}", assertion)
+        } else {
+            assertion
+        };
+
+        for node in &children {
+            assertion = format!("{} {}", assertion, self.expand_assertion(node.0))
+        }
+
+        if self.gr[ni].is_opcode() {
+            format!("{})", assertion)
+        } else {
+            assertion
+        }
+    }
+    
+    fn new_const(&mut self, cval: u64, ty: Type) -> NodeIndex {
+        let data = match ty {
+            Type::Int => NodeData::Const(cval, 64),
+            Type::BitVector(ref size) => NodeData::BVConst(cval, *size),
+        };
+        self.gr.add_node(data)
+    }
+
 }
 
 impl SMTBackend for SMTLib2 {
-    type Ident = String;
-    type Assertion = String;
+    type Ident = NodeIndex;
+    type Assertion = NodeData;
 
-    fn new_var(&mut self, ident: String, typ: Type) {
-        self.write(format!("(declare-fun {} () {})", ident, typ.to_string()));
+    fn declare_fun<T: AsRef<str>>(&mut self,
+                                  var_name: Option<T>,
+                                  args: Option<Vec<Type>>,
+                                  ty: Type)
+                                  -> Self::Ident {
+        unimplemented!()
     }
+
+    fn new_var<T: AsRef<str>>(&mut self, var_name: Option<T>, ty: Type) -> Self::Ident {
+        let var_name = var_name.map(|s| s.as_ref().to_owned()).unwrap_or({
+            self.var_index += 1;
+            format!("X_{}", self.var_index)
+        });
+        let idx = self.gr.add_node(NodeData::FreeVar(var_name.clone(), ty));
+        self.var_map.insert(var_name.clone(), idx);
+        self.idx_map.insert(idx, var_name);
+        idx
+    }
+
+
 
     fn set_logic(&mut self, logic: Logic) {
         // Set logic can only be set once in the solver and before  any declaration,
-        // definitions, assert or check-sat commands. Only exit, option and info commands may
+        // definitions, assert or check-sat commands. Only exit, option and info
+        // commands may
         // precede a set-logic command.
-        if self.logic.is_some() { panic!() }
+        if self.logic.is_some() {
+            panic!()
+        }
         self.logic = Some(logic);
-        //self.write(format!("(set-logic {})\n", logic.to_string()));
+        // self.write(format!("(set-logic {})\n", logic.to_string()));
     }
 
-    fn assert(&mut self, _: Self::Ident, assert: Self::Assertion) {
-        // TODO: In the future we may need to perform simplifications and optimizations
-        // on the queries before sending them to the solver. But currently, in this simple
-        // implementation, we will just write out the assertions to the solver and let it take care of
-        // the correctness.
-        // TODO 2: If the assertions result in an error, this must be parsed to a human-readable
-        // form and returned from this function so that the caller may handle it.
-        self.write(assert);
+    fn assert(&mut self, assert: Self::Assertion, ops: &[Self::Ident]) -> Self::Ident {
+        // TODO: Check correctness like operator arity.
+        let assertion = self.gr.add_node(assert);
+        for (i, op) in ops.iter().enumerate() {
+            self.gr.add_edge(assertion, *op, EdgeData::EdgeOrder(i));
+        }
+        assertion
     }
 
     fn check_sat(&mut self) -> bool {
+        // Write out all variable definitions.
+        let mut decls = Vec::new();
+        for (_, ni) in &self.var_map {
+            if let NodeData::FreeVar(ref name, ref ty) = self.gr[*ni] {
+                decls.push(format!("(declare-fun {} () {})\n", name, ty));
+            }
+        }
+        // Identify root nodes and generate the assertion strings.
+        let mut assertions = Vec::new();
+        for idx in self.gr.node_indices() {
+            if self.gr.edges_directed(idx, EdgeDirection::Incoming).collect::<Vec<_>>().is_empty() {
+                assertions.push(format!("(assert {})\n", self.expand_assertion(idx)));
+            }
+        }
+
+        // Set appropriate logic.
+        if let Some(logic) = self.logic {
+            self.write(format!("(set-logic {})\n", logic));
+        }
+
+        for w in decls.iter().chain(assertions.iter()) {
+            println!("w: {}", w);
+            self.write(w);
+        }
+
         self.write("(check-sat)\n".to_owned());
         if &self.read() == "sat\n" {
             true
@@ -149,7 +306,8 @@ impl SMTBackend for SMTLib2 {
 
         self.write("(get-model)\n".to_owned());
         // XXX: For some reason we need two reads here in order to get the result from
-        // the SMT solver. Need to look into the reason for this. This might stop working in the
+        // the SMT solver. Need to look into the reason for this. This might stop
+        // working in the
         // future.
         let _ = self.read();
         let read_result = self.read();
@@ -168,15 +326,16 @@ impl SMTBackend for SMTLib2 {
             // value. We need to parse the output to a u64 accordingly.
             let val_str = caps.name("val").unwrap();
             let val = if val_str.len() > 2 && &val_str[0..2] == "#x" {
-                u64::from_str_radix(&val_str[2..], 16)
-            } else if val_str.len() > 2 && &val_str[0..2] == "#b" {
-                u64::from_str_radix(&val_str[2..], 2)
-            } else {
-                val_str.parse::<u64>()
-            }.unwrap();
-            result.insert(caps.name("var").unwrap().to_owned(), val);
+                          u64::from_str_radix(&val_str[2..], 16)
+                      } else if val_str.len() > 2 && &val_str[0..2] == "#b" {
+                          u64::from_str_radix(&val_str[2..], 2)
+                      } else {
+                          val_str.parse::<u64>()
+                      }
+                      .unwrap();
+            let vname = caps.name("var").unwrap();
+            result.insert(self.var_map[vname].clone(), val);
         }
-
         Ok(result)
     }
 
@@ -218,26 +377,47 @@ impl SMTInit<For = SMTLib2> {
 mod test {
     use smt::smt::*;
     use super::*;
+    use smt::{bitvec, integer};
+    use petgraph::graph::NodeIndex;
 
     #[test]
     fn test_z3_int() {
         let mut solver = SMTLib2::new(Solver::Z3);
-        solver.new_var("x".to_owned(), Type::Int);
-        solver.new_var("y".to_owned(), Type::Int);
-        solver.assert("".to_owned(), "(assert (= x 10))".to_owned());
-        solver.assert("".to_owned(), "(assert (> x y))".to_owned());
+        let x: NodeIndex = solver.new_var::<String>(None, Type::Int);
+        let y: NodeIndex = solver.new_var::<String>(None, Type::Int);
+        let c = solver.new_const(10, Type::Int);
+        solver.assert(NodeData::IntOps(integer::OpCodes::Cmp), &[x, c]);
+        solver.assert(NodeData::IntOps(integer::OpCodes::Gt), &[x, y]);
         let result = solver.solve().unwrap();
-        assert_eq!(result["x"], 10);
-        assert_eq!(result["y"], 9);
+        assert_eq!(result[&x], 10);
+        assert_eq!(result[&y], 9);
     }
 
     #[test]
     fn test_z3_bitvec() {
+         let mut solver = SMTLib2::new(Solver::Z3);
+         solver.set_logic(Logic::QF_BV);
+         let x = solver.new_var(Some("X"), Type::BitVector(32));
+         let c = solver.new_const(10, Type::BitVector(32));
+         let c8 = solver.new_const(8, Type::BitVector(32));
+         let y = solver.new_var(Some("Y"), Type::BitVector(32));
+         solver.assert(NodeData::IntOps(integer::OpCodes::Cmp), &[x, c]);
+         let x_xor_y = solver.assert(NodeData::BVOps(bitvec::OpCodes::bvxor), &[x, y]);
+         solver.assert(NodeData::IntOps(integer::OpCodes::Cmp), &[x_xor_y, c8]);
+         let result = solver.solve().unwrap();
+         assert_eq!(result[&x], 10);
+         assert_eq!(result[&y], 2);
+    }
+
+    #[test]
+    fn test_z3_extract() {
         let mut solver = SMTLib2::new(Solver::Z3);
         solver.set_logic(Logic::QF_BV);
-        solver.new_var("x".to_owned(), Type::BitVector(32));
-        solver.assert("".to_owned(), "(assert (= x (_ bv10 32)))".to_owned());
+        let x = solver.new_var(Some("X"), Type::BitVector(32));
+        let c4 = solver.new_const(4, Type::BitVector(4));
+        let x_31_28 = solver.assert(NodeData::BVOps(bitvec::OpCodes::extract(31, 28)), &[x]);
+        solver.assert(NodeData::IntOps(integer::OpCodes::Cmp), &[x_31_28, c4]);
         let result = solver.solve().unwrap();
-        assert_eq!(result["x"], 10);
+        assert_eq!(result[&x], (0b100 << 28));
     }
 }

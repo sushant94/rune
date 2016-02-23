@@ -7,10 +7,11 @@ use std::fmt;
 
 use smt::ssmt::SMTInit;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub enum SMTError {
     Undefined,
     Unsat,
+    AssertionError(String),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -37,7 +38,7 @@ impl fmt::Display for Logic {
 #[derive(Clone, Copy, Debug)]
 pub enum Type {
     Int,
-    BitVector(u64),
+    BitVector(usize),
 }
 
 impl fmt::Display for Type {
@@ -72,13 +73,30 @@ pub trait SMT {
 /// and to grow this into a full SMTLib Crate.
 ///
 /// All functions names are analogous in meaning to their usage in the original SMT-LIB2 sense.
+/// TODO:
+///  - define_fun
+///  - declare_sort
+///  - define_sort
+///  - get_proof
+///  - get_unsat_core
+///  - get_value
+///  - get_assignment
+///  - push
+///  - pop
+///  - get_option
+///  - set_option
+///  - get_info
+///  - set_info
+///  - exit
 pub trait SMTBackend {
     type Ident: Debug + Clone;
     type Assertion: Debug + Clone;
 
     fn set_logic(&mut self, Logic);
-    fn new_var(&mut self, Self::Ident, Type);
-    fn assert(&mut self, Self::Ident, Self::Assertion);
+    fn declare_fun<T: AsRef<str>>(&mut self, Option<T>, Option<Vec<Type>>, Type) -> Self::Ident;
+
+    fn new_var<T: AsRef<str>>(&mut self, Option<T>, Type) -> Self::Ident;
+    fn assert(&mut self, Self::Assertion, &[Self::Ident]) -> Self::Ident;
     fn check_sat(&mut self) -> bool;
     fn solve(&mut self) -> SMTResult<HashMap<Self::Ident, u64>>;
 

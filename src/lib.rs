@@ -39,4 +39,6 @@ pub mod stream;
 pub mod smt {
     pub mod smt;
     pub mod ssmt;
+    pub mod bitvec;
+    pub mod integer;
 }
