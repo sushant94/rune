@@ -1,5 +1,9 @@
 //! Implements RuneContext
 
+use petgraph::graph::Graph;
+use radeco_lib::middle::ssa::ssastorage::{NodeData, EdgeData};
+use radeco_lib::middle::ir::MOpcode;
+
 use context::context_::{Context, MemoryRead, MemoryWrite, RegisterRead, RegisterWrite, ToConcrete};
 use smt::smt::{SMTBackend, SMT, SMTResult};
 use smt::ssmt::{Solver, SMTInit};
@@ -9,6 +13,7 @@ pub type VarRef = usize;
 pub struct RuneContext {
     regs: RuneRegfile,
     mem: RuneMem,
+    g: Graph<NodeData, EdgeData>,
 }
 
 pub struct RuneRegfile;

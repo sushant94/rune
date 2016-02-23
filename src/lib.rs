@@ -12,6 +12,7 @@ extern crate esil;
 extern crate r2pipe;
 extern crate rustc_serialize;
 extern crate regex;
+extern crate radeco_lib;
 
 pub mod context {
     pub mod context;

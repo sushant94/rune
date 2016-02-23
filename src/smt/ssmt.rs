@@ -57,12 +57,15 @@ impl SMTSolver for Solver {
 /// Solver struct that wraps the spawned sub-process.
 pub struct SMTLib2 {
     solver: Option<Child>,
+    logic: Option<Logic>,
+
 }
 
 impl SMTLib2 {
     pub fn new<T: SMTSolver>(s_type: T) -> SMTLib2 {
         SMTLib2 {
             solver: Some(s_type.exec()),
+            logic: None,
         }
     }
 
@@ -113,7 +116,9 @@ impl SMTBackend for SMTLib2 {
         // Set logic can only be set once in the solver and before  any declaration,
         // definitions, assert or check-sat commands. Only exit, option and info commands may
         // precede a set-logic command.
-        self.write(format!("(set-logic {})\n", logic.to_string()));
+        if self.logic.is_some() { panic!() }
+        self.logic = Some(logic);
+        //self.write(format!("(set-logic {})\n", logic.to_string()));
     }
 
     fn assert(&mut self, _: Self::Ident, assert: Self::Assertion) {
