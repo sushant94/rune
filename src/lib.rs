@@ -41,4 +41,5 @@ pub mod smt {
     pub mod ssmt;
     pub mod bitvec;
     pub mod integer;
+    pub mod core;
 }

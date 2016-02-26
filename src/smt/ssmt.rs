@@ -13,8 +13,7 @@ use petgraph::graph::{Graph, NodeIndex};
 use petgraph::EdgeDirection;
 
 use smt::smt::{Logic, SMTBackend, SMTError, SMTResult, Type};
-use smt::bitvec;
-use smt::integer;
+use smt::{bitvec, integer, core};
 
 /// Enum that contains the solvers that support SMTLib2 format.
 #[derive(Debug, Clone, Copy)]
@@ -65,6 +64,7 @@ pub enum NodeData {
     FreeVar(String, Type),
     BVOps(bitvec::OpCodes),
     IntOps(integer::OpCodes),
+    CoreOps(core::OpCodes),
     Const(u64, usize),
     BVConst(u64, usize),
 }
@@ -74,6 +74,7 @@ impl fmt::Display for NodeData {
         let s = match *self {
             NodeData::FreeVar(ref name, _) => name.clone(),
             NodeData::BVOps(ref opcode) => opcode.to_string(),
+            NodeData::CoreOps(ref opcode) => opcode.to_string(),
             NodeData::IntOps(ref opcode) => opcode.to_string(),
             NodeData::Const(ref val, _) => format!("{}", val),
             NodeData::BVConst(ref val, ref size) => format!("(_ bv{} {})", val, size),
@@ -85,7 +86,7 @@ impl fmt::Display for NodeData {
 impl NodeData {
     pub fn is_opcode(&self) -> bool {
         match *self {
-            NodeData::BVOps(_) | NodeData::IntOps(_) => true,
+            NodeData::BVOps(_) | NodeData::IntOps(_) | NodeData::CoreOps(_) => true,
             _ => false,
         }
     }
@@ -207,7 +208,7 @@ impl SMTLib2 {
         }
     }
     
-    fn new_const(&mut self, cval: u64, ty: Type) -> NodeIndex {
+    pub fn new_const(&mut self, cval: u64, ty: Type) -> NodeIndex {
         let data = match ty {
             Type::Int => NodeData::Const(cval, 64),
             Type::BitVector(ref size) => NodeData::BVConst(cval, *size),
@@ -275,7 +276,9 @@ impl SMTBackend for SMTLib2 {
         let mut assertions = Vec::new();
         for idx in self.gr.node_indices() {
             if self.gr.edges_directed(idx, EdgeDirection::Incoming).collect::<Vec<_>>().is_empty() {
-                assertions.push(format!("(assert {})\n", self.expand_assertion(idx)));
+                if self.gr[idx].is_opcode() {
+                    assertions.push(format!("(assert {})\n", self.expand_assertion(idx)));
+                }
             }
         }
 

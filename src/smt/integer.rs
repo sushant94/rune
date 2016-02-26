@@ -2,6 +2,9 @@
 
 use std::fmt;
 use std::fmt::Debug;
+use std::convert::Into;
+
+use smt::ssmt::NodeData;
 
 #[derive(Clone, Copy, Debug)]
 pub enum OpCodes {
@@ -37,5 +40,11 @@ impl fmt::Display for OpCodes {
             OpCodes::Neg => "-",
         };
         write!(f, "{}", s)
+    }
+}
+
+impl Into<NodeData> for OpCodes {
+    fn into(self) -> NodeData {
+        NodeData::IntOps(self) 
     }
 }
