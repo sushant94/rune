@@ -13,7 +13,7 @@ use petgraph::graph::{Graph, NodeIndex};
 use petgraph::EdgeDirection;
 
 use smt::smt::{Logic, SMTBackend, SMTError, SMTResult, Type};
-use smt::{bitvec, integer, core};
+use smt::theories::{bitvec, integer, core};
 
 /// Enum that contains the solvers that support SMTLib2 format.
 #[derive(Debug, Clone, Copy)]

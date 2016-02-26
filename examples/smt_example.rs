@@ -19,8 +19,8 @@ extern crate rune;
 
 use rune::smt::smt::*;
 use rune::smt::ssmt::*;
-use rune::smt::{bitvec, core};
-use rune::smt::integer::OpCodes as IOpCodes;
+use rune::smt::theories::{bitvec, core};
+use rune::smt::theories::integer::OpCodes as IOpCodes;
 //use petgraph::graph::NodeIndex;
 
 fn main() {
@@ -43,7 +43,7 @@ fn main() {
     
     let ret_addr = solver.assert(NodeData::BVOps(bitvec::OpCodes::bvadd), &[rbp, const_4]);
 
-    let selector = solver.assert(IOpCodes::Cmp, &[rax, ret_addr]);
+    let selector = solver.assert(IOpCodes::Cmp.into(), &[rax, ret_addr]);
     //solver.assert(NodeData::CoreOps(core::OpCodes::ITE), &[selector, assign_1, assign_2]);
 
     if let Ok(result) = solver.solve() {
