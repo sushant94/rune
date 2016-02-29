@@ -101,17 +101,17 @@ pub const RHS: usize = 1;
 pub const LHS: usize = 0;
 
 /// Solver struct that wraps the spawned sub-process.
-pub struct SMTLib2 {
+pub struct SMTLib2<T: Logic> {
     solver: Option<Child>,
-    logic: Option<Logic>,
-    gr: Graph<NodeData, EdgeData>,
+    logic: Option<T>,
+    gr: Graph<T::Fns, EdgeData>,
     var_index: usize,
     var_map: HashMap<String, NodeIndex>,
     idx_map: HashMap<NodeIndex, String>,
 }
 
-impl SMTLib2 {
-    pub fn new<T: SMTSolver>(s_type: T) -> SMTLib2 {
+impl<L: Logic> SMTLib2<L> {
+    pub fn new<T: SMTSolver>(s_type: T) -> SMTLib2<L> {
         let mut solver = SMTLib2 {
             solver: Some(s_type.exec()),
             logic: None,
@@ -212,13 +212,17 @@ impl SMTLib2 {
         let data = match ty {
             Type::Int => NodeData::Const(cval, 64),
             Type::BitVector(ref size) => NodeData::BVConst(cval, *size),
+            Type::Array(_, _) => unreachable!(),
+            Type::Bool => panic!("There cannot be a const of type `Bool`.\n \
+            Note: SMTLIB2 defines `true` and `false` as functions!"),
+            _ => unimplemented!(),
         };
         self.gr.add_node(data)
     }
 
 }
 
-impl SMTBackend for SMTLib2 {
+impl<L: Logic> SMTBackend for SMTLib2<L> {
     type Ident = NodeIndex;
     type Assertion = NodeData;
 
@@ -230,12 +234,12 @@ impl SMTBackend for SMTLib2 {
         unimplemented!()
     }
 
-    fn new_var<T: AsRef<str>>(&mut self, var_name: Option<T>, ty: Type) -> Self::Ident {
+    fn new_var<T: AsRef<str>>(&mut self, var_name: Option<T>, ty: L::Sorts) -> Self::Ident {
         let var_name = var_name.map(|s| s.as_ref().to_owned()).unwrap_or({
             self.var_index += 1;
             format!("X_{}", self.var_index)
         });
-        let idx = self.gr.add_node(NodeData::FreeVar(var_name.clone(), ty));
+        let idx = self.gr.add_node(L::FreeVar(var_name.clone(), ty));
         self.var_map.insert(var_name.clone(), idx);
         self.idx_map.insert(idx, var_name);
         idx
@@ -243,17 +247,17 @@ impl SMTBackend for SMTLib2 {
 
 
 
-    fn set_logic(&mut self, logic: Logic) {
-        // Set logic can only be set once in the solver and before  any declaration,
-        // definitions, assert or check-sat commands. Only exit, option and info
-        // commands may
-        // precede a set-logic command.
-        if self.logic.is_some() {
-            panic!()
-        }
-        self.logic = Some(logic);
-        // self.write(format!("(set-logic {})\n", logic.to_string()));
-    }
+    //fn set_logic(&mut self, logic: L) {
+        //// Set logic can only be set once in the solver and before  any declaration,
+        //// definitions, assert or check-sat commands. Only exit, option and info
+        //// commands may
+        //// precede a set-logic command.
+        //if self.logic.is_some() {
+            //panic!()
+        //}
+        //self.logic = Some(logic);
+        //// self.write(format!("(set-logic {})\n", logic.to_string()));
+    //}
 
     fn assert(&mut self, assert: Self::Assertion, ops: &[Self::Ident]) -> Self::Ident {
         // TODO: Check correctness like operator arity.
@@ -283,7 +287,7 @@ impl SMTBackend for SMTLib2 {
         }
 
         // Set appropriate logic.
-        if let Some(logic) = self.logic {
+        if let Some(ref logic) = self.logic {
             self.write(format!("(set-logic {})\n", logic));
         }
 
@@ -370,8 +374,8 @@ impl SpawnZ3 {
     }
 }
 
-impl SMTInit<For = SMTLib2> {
-    fn spawn(&self) -> Option<SMTLib2> {
+impl<T: Logic> SMTInit<For = SMTLib2<T>> {
+    fn spawn(&self) -> Option<SMTLib2<T>> {
         Some(SMTLib2::new(Solver::Z3))
     }
 }

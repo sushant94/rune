@@ -5,6 +5,8 @@ use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fmt;
 
+use smt::theories::core;
+
 use smt::ssmt::SMTInit;
 
 #[derive(Clone, Debug)]
@@ -14,31 +16,34 @@ pub enum SMTError {
     AssertionError(String),
 }
 
-#[derive(Clone, Copy, Debug)]
-#[allow(non_camel_case_types)]
-pub enum Logic {
-    QF_BV,
-    QF_AX,
-    QF_ABV,
-    QF_AUFB,
-}
+//#[derive(Clone, Copy, Debug)]
+//#[allow(non_camel_case_types)]
+//pub enum Logic {
+    //QF_BV,
+    //QF_AX,
+    //QF_ABV,
+    //QF_AUFB,
+//}
 
-impl fmt::Display for Logic {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let s = match *self {
-            Logic::QF_BV => "QF_BV",
-            Logic::QF_AX => "QF_AX",
-            Logic::QF_ABV => "QF_ABV",
-            Logic::QF_AUFB => "QF_AUFB",
-        };
-        write!(f, "{}", s)
-    }
-}
+//impl fmt::Display for Logic {
+    //fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        //let s = match *self {
+            //Logic::QF_BV => "QF_BV",
+            //Logic::QF_AX => "QF_AX",
+            //Logic::QF_ABV => "QF_ABV",
+            //Logic::QF_AUFB => "QF_AUFB",
+        //};
+        //write!(f, "{}", s)
+    //}
+//}
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub enum Type {
     Int,
     BitVector(usize),
+    Array(Box<Type>, Box<Type>),
+    Float,
+    Bool,
 }
 
 impl fmt::Display for Type {
@@ -46,6 +51,9 @@ impl fmt::Display for Type {
         let s = match *self {
             Type::Int => "Int".to_owned(),
             Type::BitVector(n) => format!("(_ BitVec {})", n),
+            Type::Array(ref idx, ref ty) => format!("(Array {} {})", idx, ty),
+            Type::Float => unimplemented!(),
+            Type::Bool => "Bool".to_owned(),
         };
         write!(f, "{}", s)
     }
@@ -92,7 +100,7 @@ pub trait SMTBackend {
     type Ident: Debug + Clone;
     type Assertion: Debug + Clone;
 
-    fn set_logic(&mut self, Logic);
+    //fn set_logic<T: Logic>(&mut self, T);
     fn declare_fun<T: AsRef<str>>(&mut self, Option<T>, Option<Vec<Type>>, Type) -> Self::Ident;
 
     fn new_var<T: AsRef<str>>(&mut self, Option<T>, Type) -> Self::Ident;
@@ -103,3 +111,11 @@ pub trait SMTBackend {
     fn raw_write<T: AsRef<str>>(&mut self, T);
     fn raw_read(&mut self) -> String;
 }
+
+pub trait Logic: fmt::Display {
+    type Fns;
+    type Sorts;
+    
+    fn free_var<T: AsRef<str>>(name: T) -> Self::Fns;
+}
+

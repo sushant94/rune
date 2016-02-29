@@ -15,13 +15,11 @@
 		//ret
 
 extern crate rune;
-//extern
 
 use rune::smt::smt::*;
 use rune::smt::ssmt::*;
 use rune::smt::theories::{bitvec, core};
 use rune::smt::theories::integer::OpCodes as IOpCodes;
-//use petgraph::graph::NodeIndex;
 
 fn main() {
     let mut solver = SMTLib2::new(Solver::Z3);

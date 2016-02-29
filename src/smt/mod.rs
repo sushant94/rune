@@ -9,4 +9,11 @@ pub mod theories {
     pub mod bitvec;
     pub mod integer;
     pub mod core;
+    pub mod array_ex;
+}
+
+pub mod logics {
+    #[macro_use]
+    pub mod utils;
+    pub mod qf_bv;
 }
