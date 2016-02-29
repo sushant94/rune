@@ -1,8 +1,11 @@
 use std::fmt::Debug;
 use std::fmt;
+use smt::smt::SMTNode;
 
-#[derive(Clone, Copy, Debug)]
-#[allow(non_camel_case_types)]
+#[macro_use]
+use smt::theories::utils;
+
+#[derive(Clone, Debug)]
 pub enum OpCodes {
     Concat,
     Extract(u64, u64),
@@ -42,6 +45,7 @@ pub enum OpCodes {
     Bvsgt,
     Bvsge,
     Const(u64, usize),
+    FreeVar(String),
 }
 
 impl fmt::Display for OpCodes {
@@ -83,11 +87,24 @@ impl fmt::Display for OpCodes {
             OpCodes::Bvsgt => "bvsgt".to_owned(),
             OpCodes::Bvsge => "bvsge".to_owned(),
             OpCodes::Const(val, n) => format!("(_ bv{} {})", val, n),
+            OpCodes::FreeVar(ref name) => format!("{}", name),
         };
         write!(f, "{}", s)
     }
 }
 
+impl_smt_node!(OpCodes);
+
+#[derive(Clone, Debug)]
 pub enum Sorts {
-    BitVector(usize, usize),
+    BitVector(usize),
+}
+
+impl fmt::Display for Sorts {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let s = match *self {
+            Sorts::BitVector(ref n) => format!("(_ BitVec {})", n),
+        };
+        write!(f, "{}", s)
+    }
 }

@@ -6,6 +6,8 @@ pub mod smt;
 pub mod ssmt;
 
 pub mod theories {
+    #[macro_use]
+    pub mod utils;
     pub mod bitvec;
     pub mod integer;
     pub mod core;

@@ -16,27 +16,6 @@ pub enum SMTError {
     AssertionError(String),
 }
 
-//#[derive(Clone, Copy, Debug)]
-//#[allow(non_camel_case_types)]
-//pub enum Logic {
-    //QF_BV,
-    //QF_AX,
-    //QF_ABV,
-    //QF_AUFB,
-//}
-
-//impl fmt::Display for Logic {
-    //fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        //let s = match *self {
-            //Logic::QF_BV => "QF_BV",
-            //Logic::QF_AX => "QF_AX",
-            //Logic::QF_ABV => "QF_ABV",
-            //Logic::QF_AUFB => "QF_AUFB",
-        //};
-        //write!(f, "{}", s)
-    //}
-//}
-
 #[derive(Clone, Debug)]
 pub enum Type {
     Int,
@@ -97,25 +76,38 @@ pub trait SMT {
 ///  - set_info
 ///  - exit
 pub trait SMTBackend {
-    type Ident: Debug + Clone;
-    type Assertion: Debug + Clone;
+    type Idx: Debug + Clone;
+    type Logic: Logic;
 
-    //fn set_logic<T: Logic>(&mut self, T);
-    fn declare_fun<T: AsRef<str>>(&mut self, Option<T>, Option<Vec<Type>>, Type) -> Self::Ident;
+    fn set_logic(&mut self);
+    //fn declare_fun<T: AsRef<str>>(&mut self, Option<T>, Option<Vec<Type>>, Type) -> Self::Idx;
 
-    fn new_var<T: AsRef<str>>(&mut self, Option<T>, Type) -> Self::Ident;
-    fn assert(&mut self, Self::Assertion, &[Self::Ident]) -> Self::Ident;
+    fn new_var<T, P>(&mut self, Option<T>, P) -> Self::Idx
+        where T: AsRef<str>,
+              P: Into<<<Self as SMTBackend>::Logic as Logic>::Sorts>;
+
+    fn assert<T: Into<<<Self as SMTBackend>::Logic as Logic>::Fns>>(&mut self, T, &[Self::Idx]) -> Self::Idx;
     fn check_sat(&mut self) -> bool;
-    fn solve(&mut self) -> SMTResult<HashMap<Self::Ident, u64>>;
+    fn solve(&mut self) -> SMTResult<HashMap<Self::Idx, u64>>;
 
     fn raw_write<T: AsRef<str>>(&mut self, T);
     fn raw_read(&mut self) -> String;
 }
 
-pub trait Logic: fmt::Display {
-    type Fns;
-    type Sorts;
+pub trait Logic: fmt::Display + Clone + Copy {
+    type Fns: SMTNode + fmt::Display + Debug + Clone;
+    type Sorts: fmt::Display + Debug + Clone;
     
-    fn free_var<T: AsRef<str>>(name: T) -> Self::Fns;
+    fn free_var<T: AsRef<str>>(T, Self::Sorts) -> Self::Fns;
 }
 
+pub trait SMTNode: fmt::Display {
+    /// Returns true if the node is a symbolic variable
+    fn is_var(&self) -> bool;
+    /// Returns true if the node is a constant value
+    fn is_const(&self) -> bool;
+    /// Returns true if the node is a function
+    fn is_fn(&self) -> bool {
+        !self.is_var() && !self.is_const()
+    }
+}

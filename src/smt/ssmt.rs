@@ -12,8 +12,8 @@ use regex::Regex;
 use petgraph::graph::{Graph, NodeIndex};
 use petgraph::EdgeDirection;
 
-use smt::smt::{Logic, SMTBackend, SMTError, SMTResult, Type};
-use smt::theories::{bitvec, integer, core};
+use smt::smt::{Logic, SMTBackend, SMTError, SMTResult, Type, SMTNode};
+use smt::theories::{bitvec, core, integer};
 
 /// Enum that contains the solvers that support SMTLib2 format.
 #[derive(Debug, Clone, Copy)]
@@ -106,7 +106,7 @@ pub struct SMTLib2<T: Logic> {
     logic: Option<T>,
     gr: Graph<T::Fns, EdgeData>,
     var_index: usize,
-    var_map: HashMap<String, NodeIndex>,
+    var_map: HashMap<String, (NodeIndex, T::Sorts)>,
     idx_map: HashMap<NodeIndex, String>,
 }
 
@@ -122,7 +122,7 @@ impl<L: Logic> SMTLib2<L> {
         };
 
         // TODO: Re-enable success message.
-        //solver.write("(set-option :print-success true)\n");
+        // solver.write("(set-option :print-success true)\n");
         solver
     }
 
@@ -142,7 +142,9 @@ impl<L: Logic> SMTLib2<L> {
             if let Some(ref mut stdout) = solver.stdout.as_mut() {
                 loop {
                     let n = stdout.read(&mut bytes_read).unwrap();
-                    s = format!("{}{}", s, String::from_utf8(bytes_read[0..n].to_vec()).unwrap());
+                    s = format!("{}{}",
+                                s,
+                                String::from_utf8(bytes_read[0..n].to_vec()).unwrap());
                     if let Some(_) = s.find(delimiter) {
                         break;
                     }
@@ -182,16 +184,19 @@ impl<L: Logic> SMTLib2<L> {
 
     // Recursive function that builds up the assertion string from the tree.
     pub fn expand_assertion(&self, ni: NodeIndex) -> String {
-        let mut children = self.gr.edges_directed(ni, EdgeDirection::Outgoing).map(|(other, edge)| {
-            match *edge {
-                EdgeData::EdgeOrder(ref i) => (other, *i),
-            }
-        }).collect::<Vec<_>>();
+        let mut children = self.gr
+                               .edges_directed(ni, EdgeDirection::Outgoing)
+                               .map(|(other, edge)| {
+                                   match *edge {
+                                       EdgeData::EdgeOrder(ref i) => (other, *i),
+                                   }
+                               })
+                               .collect::<Vec<_>>();
         children.sort_by(|x, y| (x.1).cmp(&y.1));
 
         let mut assertion = self.gr[ni].to_string();
 
-        assertion = if self.gr[ni].is_opcode() {
+        assertion = if self.gr[ni].is_fn() {
             format!("({}", assertion)
         } else {
             assertion
@@ -201,67 +206,45 @@ impl<L: Logic> SMTLib2<L> {
             assertion = format!("{} {}", assertion, self.expand_assertion(node.0))
         }
 
-        if self.gr[ni].is_opcode() {
+        if self.gr[ni].is_fn() {
             format!("{})", assertion)
         } else {
             assertion
         }
     }
-    
-    pub fn new_const(&mut self, cval: u64, ty: Type) -> NodeIndex {
-        let data = match ty {
-            Type::Int => NodeData::Const(cval, 64),
-            Type::BitVector(ref size) => NodeData::BVConst(cval, *size),
-            Type::Array(_, _) => unreachable!(),
-            Type::Bool => panic!("There cannot be a const of type `Bool`.\n \
-            Note: SMTLIB2 defines `true` and `false` as functions!"),
-            _ => unimplemented!(),
-        };
-        self.gr.add_node(data)
-    }
 
+    pub fn new_const<T: Into<L::Fns>>(&mut self, cval: T) -> NodeIndex {
+        self.gr.add_node(cval.into())
+    }
 }
 
 impl<L: Logic> SMTBackend for SMTLib2<L> {
-    type Ident = NodeIndex;
-    type Assertion = NodeData;
+    type Idx = NodeIndex;
+    type Logic = L;
 
-    fn declare_fun<T: AsRef<str>>(&mut self,
-                                  var_name: Option<T>,
-                                  args: Option<Vec<Type>>,
-                                  ty: Type)
-                                  -> Self::Ident {
-        unimplemented!()
-    }
-
-    fn new_var<T: AsRef<str>>(&mut self, var_name: Option<T>, ty: L::Sorts) -> Self::Ident {
+    fn new_var<T, P>(&mut self, var_name: Option<T>, ty: P) -> Self::Idx
+        where T: AsRef<str>,
+              P: Into<<<Self as SMTBackend>::Logic as Logic>::Sorts>
+    {
         let var_name = var_name.map(|s| s.as_ref().to_owned()).unwrap_or({
             self.var_index += 1;
             format!("X_{}", self.var_index)
         });
-        let idx = self.gr.add_node(L::FreeVar(var_name.clone(), ty));
-        self.var_map.insert(var_name.clone(), idx);
+        let typ = ty.into();
+        let idx = self.gr.add_node(Self::Logic::free_var(var_name.clone(), typ.clone()));
+        self.var_map.insert(var_name.clone(), (idx, typ));
         self.idx_map.insert(idx, var_name);
         idx
     }
 
+    fn set_logic(&mut self) {
+        let logic = self.logic.unwrap().clone();
+        self.write(format!("(set-logic {})\n", logic));
+    }
 
-
-    //fn set_logic(&mut self, logic: L) {
-        //// Set logic can only be set once in the solver and before  any declaration,
-        //// definitions, assert or check-sat commands. Only exit, option and info
-        //// commands may
-        //// precede a set-logic command.
-        //if self.logic.is_some() {
-            //panic!()
-        //}
-        //self.logic = Some(logic);
-        //// self.write(format!("(set-logic {})\n", logic.to_string()));
-    //}
-
-    fn assert(&mut self, assert: Self::Assertion, ops: &[Self::Ident]) -> Self::Ident {
+    fn assert<T: Into<L::Fns>>(&mut self, assert: T, ops: &[Self::Idx]) -> Self::Idx {
         // TODO: Check correctness like operator arity.
-        let assertion = self.gr.add_node(assert);
+        let assertion = self.gr.add_node(assert.into());
         for (i, op) in ops.iter().enumerate() {
             self.gr.add_edge(assertion, *op, EdgeData::EdgeOrder(i));
         }
@@ -271,25 +254,27 @@ impl<L: Logic> SMTBackend for SMTLib2<L> {
     fn check_sat(&mut self) -> bool {
         // Write out all variable definitions.
         let mut decls = Vec::new();
-        for (_, ni) in &self.var_map {
-            if let NodeData::FreeVar(ref name, ref ty) = self.gr[*ni] {
+        for (name, val) in &self.var_map {
+            let ni = &val.0;
+            let ty = &val.1;
+            if self.gr[*ni].is_var() {
                 decls.push(format!("(declare-fun {} () {})\n", name, ty));
             }
         }
-        // Identify root nodes and generate the assertion strings.
+        // Idxify root nodes and generate the assertion strings.
         let mut assertions = Vec::new();
         for idx in self.gr.node_indices() {
             if self.gr.edges_directed(idx, EdgeDirection::Incoming).collect::<Vec<_>>().is_empty() {
-                if self.gr[idx].is_opcode() {
+                if self.gr[idx].is_fn() {
                     assertions.push(format!("(assert {})\n", self.expand_assertion(idx)));
                 }
             }
         }
 
         // Set appropriate logic.
-        if let Some(ref logic) = self.logic {
-            self.write(format!("(set-logic {})\n", logic));
-        }
+        //if let Some(ref logic) = self.logic {
+            //self.write(format!("(set-logic {})\n", logic));
+        //}
 
         for w in decls.iter().chain(assertions.iter()) {
             println!("w: {}", w);
@@ -305,7 +290,7 @@ impl<L: Logic> SMTBackend for SMTLib2<L> {
     }
 
     // TODO: Return type information along with the value.
-    fn solve(&mut self) -> SMTResult<HashMap<Self::Ident, u64>> {
+    fn solve(&mut self) -> SMTResult<HashMap<Self::Idx, u64>> {
         let mut result = HashMap::new();
         if !self.check_sat() {
             return Err(SMTError::Unsat);
@@ -341,7 +326,7 @@ impl<L: Logic> SMTBackend for SMTLib2<L> {
                       }
                       .unwrap();
             let vname = caps.name("var").unwrap();
-            result.insert(self.var_map[vname].clone(), val);
+            result.insert(self.var_map[vname].0.clone(), val);
         }
         Ok(result)
     }
@@ -402,18 +387,18 @@ mod test {
 
     #[test]
     fn test_z3_bitvec() {
-         let mut solver = SMTLib2::new(Solver::Z3);
-         solver.set_logic(Logic::QF_BV);
-         let x = solver.new_var(Some("X"), Type::BitVector(32));
-         let c = solver.new_const(10, Type::BitVector(32));
-         let c8 = solver.new_const(8, Type::BitVector(32));
-         let y = solver.new_var(Some("Y"), Type::BitVector(32));
-         solver.assert(NodeData::IntOps(integer::OpCodes::Cmp), &[x, c]);
-         let x_xor_y = solver.assert(NodeData::BVOps(bitvec::OpCodes::bvxor), &[x, y]);
-         solver.assert(NodeData::IntOps(integer::OpCodes::Cmp), &[x_xor_y, c8]);
-         let result = solver.solve().unwrap();
-         assert_eq!(result[&x], 10);
-         assert_eq!(result[&y], 2);
+        let mut solver = SMTLib2::new(Solver::Z3);
+        solver.set_logic(Logic::QF_BV);
+        let x = solver.new_var(Some("X"), Type::BitVector(32));
+        let c = solver.new_const(10, Type::BitVector(32));
+        let c8 = solver.new_const(8, Type::BitVector(32));
+        let y = solver.new_var(Some("Y"), Type::BitVector(32));
+        solver.assert(NodeData::IntOps(integer::OpCodes::Cmp), &[x, c]);
+        let x_xor_y = solver.assert(NodeData::BVOps(bitvec::OpCodes::bvxor), &[x, y]);
+        solver.assert(NodeData::IntOps(integer::OpCodes::Cmp), &[x_xor_y, c8]);
+        let result = solver.solve().unwrap();
+        assert_eq!(result[&x], 10);
+        assert_eq!(result[&y], 2);
     }
 
     #[test]
