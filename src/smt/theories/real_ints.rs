@@ -17,9 +17,9 @@ pub enum OpCodes {
     Lt,
     Gte,
     Gt,
-    To_real,
-    To_int,
-    Is_int,
+    ToReal,
+    ToInt,
+    IsInt,
     ConstInt(u64),
     ConstReal(f64),
     FreeVar(String),
@@ -37,9 +37,9 @@ impl fmt::Display for OpCodes {
             OpCodes::Lt => "<".to_owned(),
             OpCodes::Gte => ">=".to_owned(),
             OpCodes::Gt => ">".to_owned(),
-            OpCodes::To_real => "to_real".to_owned(),
-            OpCodes::To_int => "to_int".to_owned(),
-            OpCodes::Is_int => "is_int".to_owned(),
+            OpCodes::ToReal => "to_real".to_owned(),
+            OpCodes::ToInt => "to_int".to_owned(),
+            OpCodes::IsInt => "is_int".to_owned(),
             OpCodes::ConstInt(ref val) => format!("{}", val),
             OpCodes::ConstReal(ref val) => format!("{}", val),
             OpCodes::FreeVar(ref name) => format!("{}", name),
@@ -48,7 +48,7 @@ impl fmt::Display for OpCodes {
     }
 }
 
-impl_smt_node!(OpCodes);
+impl_smt_node!(OpCodes, define consts [OpCodes::ConstInt(_), OpCodes::ConstReal(_)]);
 
 #[derive(Clone,Debug)]
 pub enum Sorts {

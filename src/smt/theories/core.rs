@@ -17,7 +17,6 @@ pub enum OpCodes {
     Cmp,
     Distinct,
     ITE,
-    Const(u64, usize),
     FreeVar(String)
 }
 
@@ -35,13 +34,12 @@ impl fmt::Display for OpCodes {
             OpCodes::True => "true".to_owned(),
             OpCodes::False => "false".to_owned(),
             OpCodes::FreeVar(ref s) => s.clone(),
-            OpCodes::Const(_,_) => panic!(),
         };
         write!(f, "{}", s)
     }
 }
 
-impl_smt_node!(OpCodes);
+impl_smt_node!(OpCodes, define consts []);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Sorts {

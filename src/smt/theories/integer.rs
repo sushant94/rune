@@ -21,7 +21,7 @@ pub enum OpCodes {
     Add,
     Sub,
     Neg,
-    Const(u64, u64),
+    Const(u64),
     FreeVar(String),
 }
 
@@ -41,14 +41,14 @@ impl fmt::Display for OpCodes {
             OpCodes::Add => "+".to_owned(),
             OpCodes::Sub => "-".to_owned(),
             OpCodes::Neg => "-".to_owned(),
-            OpCodes::Const(ref val, _) => format!("{}", val),
+            OpCodes::Const(ref val) => format!("{}", val),
             OpCodes::FreeVar(ref name) => format!("{}", name),
         };
         write!(f, "{}", s)
     }
 }
 
-impl_smt_node!(OpCodes);
+impl_smt_node!(OpCodes, define consts [OpCodes::Const(_)]);
 
 #[derive(Clone, Debug)]
 pub enum Sorts {

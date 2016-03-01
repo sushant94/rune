@@ -9,7 +9,7 @@ pub enum OpCodes {
     Select,
     Store,
     FreeVar(String),
-    Const(u64, usize),
+    Const(u64),
 }
 
 impl fmt::Display for OpCodes {
@@ -18,13 +18,13 @@ impl fmt::Display for OpCodes {
             OpCodes::Select => "select".to_owned(),
             OpCodes::Store => "store".to_owned(),
             OpCodes::FreeVar(ref s) => s.clone(),
-            OpCodes::Const(_, _) => unreachable!(),
+            OpCodes::Const(_) => unreachable!(),
         };
         write!(f, "{}", s)
     }
 }
 
-impl_smt_node!(OpCodes);
+impl_smt_node!(OpCodes, define consts [OpCodes::Const(_)]);
 
 #[derive(Clone, Debug)]
 pub enum Sorts<X, Y>
