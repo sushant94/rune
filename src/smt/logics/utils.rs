@@ -87,7 +87,7 @@ macro_rules! define_fns_for_logic {
 
 #[macro_export]
 macro_rules! define_logic {
-    ($logic: ident, $op: ident, $sorts: ty, $fv: path) => {
+    ($logic: ident, $op: ident, $sorts: ty, map { $($fv: pat => $rt: path),* }) => {
         #[derive(Clone, Copy, Debug)]
         pub struct $logic;
 
@@ -102,7 +102,12 @@ macro_rules! define_logic {
             type Sorts = $sorts;
 
             fn free_var<T: AsRef<str>>(name: T, ty: $sorts) -> Self::Fns {
-                $fv(name.as_ref().to_owned()).into()
+                match ty {
+                    $(
+                        $fv => $rt(name.as_ref().to_owned()).into(),
+                    )*
+                    _ => unreachable!(),
+                }
             }
         }
     }

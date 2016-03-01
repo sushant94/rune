@@ -2,9 +2,6 @@ use std::fmt::Debug;
 use std::fmt;
 use smt::smt::SMTNode;
 
-#[macro_use]
-use smt::theories::utils;
-
 #[derive(Clone, Debug)]
 pub enum OpCodes {
     Concat,

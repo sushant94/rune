@@ -3,7 +3,9 @@
 use std::fmt;
 use std::fmt::Debug;
 
-#[derive(Clone, Copy, Debug)]
+use smt::smt::SMTNode;
+
+#[derive(Clone, Debug)]
 pub enum OpCodes {
     True,
     False,
@@ -15,25 +17,31 @@ pub enum OpCodes {
     Cmp,
     Distinct,
     ITE,
+    Const(u64, usize),
+    FreeVar(String)
 }
 
 impl fmt::Display for OpCodes {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let s = match *self {
-            OpCodes::Not => "not",
-            OpCodes::Imply => "=>",
-            OpCodes::And => "and",
-            OpCodes::Or => "or",
-            OpCodes::Xor => "xor",
-            OpCodes::Cmp => "=",
-            OpCodes::Distinct => "distinct",
-            OpCodes::ITE => "ite",
-            OpCodes::True => "true",
-            OpCodes::False => "false",
+            OpCodes::Not => "not".to_owned(),
+            OpCodes::Imply => "=>".to_owned(),
+            OpCodes::And => "and".to_owned(),
+            OpCodes::Or => "or".to_owned(),
+            OpCodes::Xor => "xor".to_owned(),
+            OpCodes::Cmp => "=".to_owned(),
+            OpCodes::Distinct => "distinct".to_owned(),
+            OpCodes::ITE => "ite".to_owned(),
+            OpCodes::True => "true".to_owned(),
+            OpCodes::False => "false".to_owned(),
+            OpCodes::FreeVar(ref s) => s.clone(),
+            OpCodes::Const(_,_) => panic!(),
         };
         write!(f, "{}", s)
     }
 }
+
+impl_smt_node!(OpCodes);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Sorts {

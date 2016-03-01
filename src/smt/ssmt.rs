@@ -111,10 +111,10 @@ pub struct SMTLib2<T: Logic> {
 }
 
 impl<L: Logic> SMTLib2<L> {
-    pub fn new<T: SMTSolver>(s_type: T) -> SMTLib2<L> {
+    pub fn new<T: SMTSolver>(s_type: T, logic: Option<L>) -> SMTLib2<L> {
         let mut solver = SMTLib2 {
             solver: Some(s_type.exec()),
-            logic: None,
+            logic: logic,
             gr: Graph::new(),
             var_index: 0,
             var_map: HashMap::new(),
@@ -238,6 +238,7 @@ impl<L: Logic> SMTBackend for SMTLib2<L> {
     }
 
     fn set_logic(&mut self) {
+        if self.logic.is_none() { return; }
         let logic = self.logic.unwrap().clone();
         self.write(format!("(set-logic {})\n", logic));
     }
@@ -361,7 +362,7 @@ impl SpawnZ3 {
 
 impl<T: Logic> SMTInit<For = SMTLib2<T>> {
     fn spawn(&self) -> Option<SMTLib2<T>> {
-        Some(SMTLib2::new(Solver::Z3))
+        Some(SMTLib2::new(Solver::Z3, None))
     }
 }
 

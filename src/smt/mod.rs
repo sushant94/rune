@@ -18,4 +18,6 @@ pub mod logics {
     #[macro_use]
     pub mod utils;
     pub mod qf_bv;
+    pub mod qf_aufbv;
+    pub mod qf_abv;
 }
