@@ -1,12 +1,13 @@
-//! Defines basic operation defined under QF_UF in SMTLIB2.
+//! Defines basic operations defined under Int theory in SMTLIB2.
 
 use std::fmt;
 use std::fmt::Debug;
-use std::convert::Into;
+use smt::smt::SMTNode;
 
-use smt::ssmt::NodeData;
+#[macro_use]
+use smt::theories::utils;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub enum OpCodes {
     Cmp,
     Lt,
@@ -20,31 +21,42 @@ pub enum OpCodes {
     Add,
     Sub,
     Neg,
+    Const(u64, u64),
+    FreeVar(String),
 }
 
 
 impl fmt::Display for OpCodes {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let s = match *self {
-            OpCodes::Cmp => "=",
-            OpCodes::Lt => "<",
-            OpCodes::Gt => ">",
-            OpCodes::Lte => "<=",
-            OpCodes::Gte => ">=",
-            OpCodes::Mod => "mod",
-            OpCodes::Div => "div",
-            OpCodes::Abs => "abs",
-            OpCodes::Mul => "*",
-            OpCodes::Add => "+",
-            OpCodes::Sub => "-",
-            OpCodes::Neg => "-",
+            OpCodes::Cmp => "=".to_owned(),
+            OpCodes::Lt => "<".to_owned(),
+            OpCodes::Gt => ">".to_owned(),
+            OpCodes::Lte => "<=".to_owned(),
+            OpCodes::Gte => ">=".to_owned(),
+            OpCodes::Mod => "mod".to_owned(),
+            OpCodes::Div => "div".to_owned(),
+            OpCodes::Abs => "abs".to_owned(),
+            OpCodes::Mul => "*".to_owned(),
+            OpCodes::Add => "+".to_owned(),
+            OpCodes::Sub => "-".to_owned(),
+            OpCodes::Neg => "-".to_owned(),
+            OpCodes::Const(ref val, _) => format!("{}", val),
+            OpCodes::FreeVar(ref name) => format!("{}", name),
         };
         write!(f, "{}", s)
     }
 }
 
-impl Into<NodeData> for OpCodes {
-    fn into(self) -> NodeData {
-        NodeData::IntOps(self) 
+impl_smt_node!(OpCodes);
+
+#[derive(Clone, Debug)]
+pub enum Sorts {
+    Int
+}
+
+impl fmt::Display for Sorts {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", "Int")
     }
 }

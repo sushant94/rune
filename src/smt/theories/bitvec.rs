@@ -1,3 +1,5 @@
+//! Defines basic operations defined under FixedSizeBitVectors theory in SMTLIB2.
+
 use std::fmt::Debug;
 use std::fmt;
 use smt::smt::SMTNode;

@@ -12,6 +12,8 @@ pub mod theories {
     pub mod integer;
     pub mod core;
     pub mod array_ex;
+    pub mod real;
+    pub mod real_ints;
 }
 
 pub mod logics {
