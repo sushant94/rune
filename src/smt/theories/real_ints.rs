@@ -48,7 +48,7 @@ impl fmt::Display for OpCodes {
     }
 }
 
-impl_smt_node!(OpCodes)
+impl_smt_node!(OpCodes);
 
 #[derive(Clone,Debug)]
 pub enum Sorts {
