@@ -13,6 +13,7 @@ extern crate r2pipe;
 extern crate rustc_serialize;
 extern crate regex;
 extern crate radeco_lib;
+extern crate libsmt;
 
 pub mod context {
     pub mod context;
@@ -35,5 +36,3 @@ pub mod engine {
 }
 
 pub mod stream;
-
-pub mod smt;

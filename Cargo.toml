@@ -8,6 +8,9 @@ petgraph = "*"
 rustc-serialize = "*"
 regex = "*"
 
+[dependencies.libsmt]
+path = "../libsmt-rs/"
+
 [dependencies.radeco-lib]
 path = "../radeco-lib/"
 
