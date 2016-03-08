@@ -2,8 +2,8 @@
 
 use std::fmt::Debug;
 use std::hash::Hash;
-use smt::smt::{SMT};
-use smt::ssmt::{SMTInit};
+use libsmt::smt::{SMT};
+use libsmt::ssmt::{SMTInit};
 
 pub trait Context: Sized {
     fn load_ctx(&[u8]) -> Self;
