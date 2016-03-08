@@ -1,22 +1,27 @@
 //! Implementation of context for rune.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
+
 use std::fmt::Debug;
 
 use r2pipe::structs::LRegInfo;
 use petgraph::graph::NodeIndex;
 use libsmt::ssmt::{SMTLib2, SMTSolver};
 use libsmt::smt::SMTBackend;
-use libsmt::logics::qf_abv::QF_ABV;
-use libsmt::theories::{bitvec, core};
+use libsmt::logics::qf_abv;
+
+use libsmt::theories::{array_ex, bitvec, core};
 
 pub struct RuneContext {
-    solver: SMTLib2<QF_ABV>,
+    solver: SMTLib2<qf_abv::QF_ABV>,
     current_regs: RuneRegFile,
     mem: RuneMemory,
 }
 
-pub struct RuneMemory;
+#[derive(Clone, Debug)]
+pub struct RuneMemory {
+    map: Option<NodeIndex>,
+}
 
 #[derive(Clone, Debug)]
 struct RegEntry {
@@ -85,7 +90,7 @@ impl RuneRegFile {
         }
     }
 
-    pub fn read(&mut self, reg_name: String, solver: &mut SMTLib2<QF_ABV>) -> NodeIndex {
+    pub fn read(&mut self, reg_name: String, solver: &mut SMTLib2<qf_abv::QF_ABV>) -> NodeIndex {
         let rentry = &self.regfile[&reg_name];
         let idx = self.current_regs[rentry.idx].unwrap();
         if !rentry.is_whole {
@@ -99,7 +104,7 @@ impl RuneRegFile {
     pub fn write(&mut self,
                  dest: String,
                  source: NodeIndex,
-                 solver: &mut SMTLib2<QF_ABV>)
+                 solver: &mut SMTLib2<qf_abv::QF_ABV>)
                  -> NodeIndex {
         let rentry = &self.regfile[&dest];
         if !rentry.is_whole {
@@ -118,4 +123,41 @@ impl RuneRegFile {
 }
 
 impl RuneMemory {
+    pub fn new() -> RuneMemory {
+        RuneMemory { map: None }
+    }
+
+    pub fn init_memory(&mut self, solver: &mut SMTLib2<qf_abv::QF_ABV>) {
+        let bv_array = qf_abv::array_sort(qf_abv::bv_sort(64), qf_abv::bv_sort(64));
+        let idx_ = solver.new_var(Some("mem"), bv_array);
+        // Set memory to all 0s
+        let arr_const_ty = qf_abv::array_const(qf_abv::bv_sort(64), qf_abv::bv_sort(64), bitvec::OpCodes::Const(0, 64));
+        let const_0 = solver.new_const(arr_const_ty);
+        let idx = solver.assert(core::OpCodes::Cmp, &[idx_, const_0]);
+        self.map = Some(idx);
+    }
+
+    pub fn read(&mut self, addr: u64, read_size: u64, solver: &mut SMTLib2<qf_abv::QF_ABV>) -> NodeIndex {
+        if self.map.is_none() {
+            self.init_memory(solver);
+        }
+        let mem = self.map.unwrap();
+        let const_addr = bv_const!(solver, addr, 64);
+        let mut idx = solver.assert(array_ex::OpCodes::Select, &[mem, const_addr]);
+        if read_size < 64 {
+            solver.assert(bitvec::OpCodes::Extract(read_size - 1, 1), &[idx])
+        } else {
+            idx
+        }
+    }
+
+    pub fn write(&mut self, addr: u64, data: NodeIndex, write_size: u64, solver: &mut SMTLib2<qf_abv::QF_ABV>) {
+        if self.map.is_none() {
+            self.init_memory(solver);
+        }
+        let mem = self.map.unwrap();
+        let const_addr = bv_const!(solver, addr, 64);
+        let new_mem = solver.assert(array_ex::OpCodes::Store, &[mem, const_addr, data]);
+        self.map = Some(new_mem);
+    }
 }
