@@ -1,20 +1,21 @@
 //! Implementation of context for rune.
 
 use std::collections::{BTreeMap, HashMap};
-
 use std::fmt::Debug;
 
 use r2pipe::structs::LRegInfo;
 use petgraph::graph::NodeIndex;
-use libsmt::ssmt::{SMTLib2, SMTSolver};
-use libsmt::smt::SMTBackend;
+use libsmt::backends::smtlib2::SMTLib2;
+use libsmt::backends::backend::SMTBackend;
 use libsmt::logics::qf_abv;
-
 use libsmt::theories::{array_ex, bitvec, core};
 
+use context::context::{Context, Evaluate, MemoryRead, MemoryWrite, RegisterRead, RegisterWrite};
+
+#[derive(Clone, Debug)]
 pub struct RuneContext {
     solver: SMTLib2<qf_abv::QF_ABV>,
-    current_regs: RuneRegFile,
+    regfile: RuneRegFile,
     mem: RuneMemory,
 }
 
@@ -90,28 +91,25 @@ impl RuneRegFile {
         }
     }
 
-    pub fn read(&mut self, reg_name: String, solver: &mut SMTLib2<qf_abv::QF_ABV>) -> NodeIndex {
-        let rentry = &self.regfile[&reg_name];
+    fn read(&mut self, reg_name: &str, solver: &mut SMTLib2<qf_abv::QF_ABV>) -> NodeIndex {
+        let rentry = &self.regfile[reg_name];
         let idx = self.current_regs[rentry.idx].unwrap();
         if !rentry.is_whole {
             solver.assert(bitvec::OpCodes::Extract((rentry.end_bit + 1) as u64, 1),
-                          &[idx])
+                               &[idx])
         } else {
             idx
         }
     }
 
-    pub fn write(&mut self,
-                 dest: String,
-                 source: NodeIndex,
-                 solver: &mut SMTLib2<qf_abv::QF_ABV>)
-                 -> NodeIndex {
-        let rentry = &self.regfile[&dest];
+    // TODO: Fix Write. This is incorrect, this corresponds to cmp instruction.
+    fn write(&mut self, dest: &str, source: NodeIndex, solver: &mut SMTLib2<qf_abv::QF_ABV>) -> NodeIndex {
+        let rentry = &self.regfile[dest];
         if !rentry.is_whole {
             let widx = self.current_regs[rentry.idx].unwrap();
             // Add extract operations to trim to correct size of the register.
             let idx = solver.assert(bitvec::OpCodes::Extract((rentry.end_bit + 1) as u64, 1),
-                                    &[widx]);
+                                         &[widx]);
             solver.assert(core::OpCodes::Cmp, &[idx, source])
         } else {
             let idx = self.current_regs[rentry.idx].unwrap();
@@ -131,19 +129,20 @@ impl RuneMemory {
         let bv_array = qf_abv::array_sort(qf_abv::bv_sort(64), qf_abv::bv_sort(64));
         let idx_ = solver.new_var(Some("mem"), bv_array);
         // Set memory to all 0s
-        let arr_const_ty = qf_abv::array_const(qf_abv::bv_sort(64), qf_abv::bv_sort(64), bitvec::OpCodes::Const(0, 64));
+        let arr_const_ty = qf_abv::array_const(qf_abv::bv_sort(64),
+                                               qf_abv::bv_sort(64),
+                                               bitvec::OpCodes::Const(0, 64));
         let const_0 = solver.new_const(arr_const_ty);
         let idx = solver.assert(core::OpCodes::Cmp, &[idx_, const_0]);
         self.map = Some(idx);
     }
 
-    pub fn read(&mut self, addr: u64, read_size: u64, solver: &mut SMTLib2<qf_abv::QF_ABV>) -> NodeIndex {
+    pub fn read(&mut self, addr: NodeIndex, read_size: u64, solver: &mut SMTLib2<qf_abv::QF_ABV>) -> NodeIndex {
         if self.map.is_none() {
             self.init_memory(solver);
         }
         let mem = self.map.unwrap();
-        let const_addr = bv_const!(solver, addr, 64);
-        let mut idx = solver.assert(array_ex::OpCodes::Select, &[mem, const_addr]);
+        let mut idx = solver.assert(array_ex::OpCodes::Select, &[mem, addr]);
         if read_size < 64 {
             solver.assert(bitvec::OpCodes::Extract(read_size - 1, 1), &[idx])
         } else {
@@ -151,13 +150,74 @@ impl RuneMemory {
         }
     }
 
-    pub fn write(&mut self, addr: u64, data: NodeIndex, write_size: u64, solver: &mut SMTLib2<qf_abv::QF_ABV>) {
+    pub fn write(&mut self, addr: NodeIndex, data: NodeIndex, write_size: u64, solver: &mut SMTLib2<qf_abv::QF_ABV>) {
         if self.map.is_none() {
             self.init_memory(solver);
         }
         let mem = self.map.unwrap();
-        let const_addr = bv_const!(solver, addr, 64);
-        let new_mem = solver.assert(array_ex::OpCodes::Store, &[mem, const_addr, data]);
+        let new_mem = solver.assert(array_ex::OpCodes::Store, &[mem, addr, data]);
         self.map = Some(new_mem);
+    }
+}
+
+impl Context for RuneContext {
+    fn ip(&self) -> u64 {
+        unimplemented!();
+    }
+
+    fn is_symbolic(&self) -> bool {
+        unimplemented!();
+    }
+
+    fn increment_ip(&mut self, by: &u64) {
+        unimplemented!();
+    }
+
+    fn define_const(&mut self, c: u64) -> NodeIndex {
+        unimplemented!();
+    }
+}
+
+impl RegisterRead for RuneContext {
+    type VarRef = NodeIndex;
+
+    fn reg_read<T: AsRef<str>>(&mut self, reg: T) -> NodeIndex {
+        self.regfile.read(reg.as_ref(), &mut self.solver)
+    }
+}
+
+impl RegisterWrite for RuneContext {
+    type VarRef = NodeIndex;
+
+    fn reg_write<T: AsRef<str>>(&mut self, reg: T, source: NodeIndex) {
+        let _ = self.regfile.write(reg.as_ref(), source, &mut self.solver);
+    }
+}
+
+impl MemoryRead for RuneContext {
+    type VarRef = NodeIndex;
+
+    fn mem_read(&mut self, addr: NodeIndex, size: u64) -> NodeIndex {
+        self.mem.read(addr, size, &mut self.solver)
+    }
+}
+
+impl  MemoryWrite for RuneContext {
+    type VarRef = NodeIndex;
+
+    fn mem_write(&mut self, addr: NodeIndex, data: NodeIndex, write_size: u64) {
+        self.mem.write(addr, data, write_size, &mut self.solver);
+    }
+}
+
+impl Evaluate for RuneContext {
+    type VarRef = NodeIndex;
+    type IFn = qf_abv::QF_ABV_Fn;
+
+    fn eval<T, Q>(&mut self, smt_fn: T, operands: Q) -> Self::VarRef
+        where T: Into<Self::IFn>,
+              Q: AsRef<[Self::VarRef]>
+    {
+        self.solver.assert(smt_fn, &operands.as_ref())
     }
 }

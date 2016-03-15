@@ -1,14 +1,18 @@
 //! Trait and struct implementations for rune symbolic engine
 
 use r2pipe::structs::LOpInfo;
+use petgraph::graph::NodeIndex;
 
-use context::context::{Context, RefType};
-use context::bv::BitVector;
+use context::context::{Context, Evaluate, MemoryRead, MemoryWrite, RegisterRead, RegisterWrite};
+use context::rcontext::RuneContext;
 use explorer::explorer::PathExplorer;
-use stream::{InstructionStream};
-use engine::engine::{Configure, Engine, EngineResult};
+use stream::InstructionStream;
+use engine::engine::{Configure, Engine, EngineResult, EngineError};
 use esil::lexer::{Token, Tokenizer};
 use esil::parser::{Parse, Parser};
+
+use libsmt::theories::{bitvec, core};
+use libsmt::logics::qf_abv;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum RuneControl {
@@ -25,7 +29,6 @@ pub struct Rune<Ctx, Exp, S>
     where Ctx: Context,
           Exp: PathExplorer,
           S: InstructionStream<Output = LOpInfo, Index = u64>
-
 {
     /// Context on which the instance of rune operates on
     ctx: Ctx,
@@ -33,78 +36,82 @@ pub struct Rune<Ctx, Exp, S>
     explorer: Exp,
     /// Stores values that are intermediates during symbolic execution. These are not
     /// a part of register or memory
-    intermediates: Vec<Ctx::BV>,
+    intermediates: Vec<<Ctx as RegisterRead>::VarRef>,
     stream: S,
 }
 
-impl<Ctx, Exp, S> Configure for Rune<Ctx, Exp, S>
-where Ctx: Context<Idx = RefType<usize, usize>>,
-      Exp: PathExplorer<C = RuneControl, Ctx = Ctx>,
-      S: InstructionStream<Output = LOpInfo, Index = u64>
-{
-    type For = Rune<Ctx, Exp, S>;
-    fn configure(_: &mut Rune<Ctx, Exp, S>) -> EngineResult<()> {
-        unimplemented!()
-    }
-}
 
-impl<Ctx, Exp, S> Rune<Ctx, Exp, S>
-where Ctx: Context<Idx = RefType<usize, usize>>,
+impl<S, Exp, Ctx = RuneContext> Rune<Ctx, Exp, S>
+where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
       Exp: PathExplorer<C = RuneControl, Ctx = Ctx>,
       S: InstructionStream<Output = LOpInfo, Index = u64>
 {
-    fn process_in(&mut self, t: Option<Token>) -> EngineResult<Option<Ctx::BV>> {
+
+    pub fn new(ctx: Ctx, exp: Exp, stream: S) -> Rune<Ctx, Exp, S> {
+        Rune {
+            ctx: ctx,
+            explorer: exp,
+            intermediates: Vec::new(),
+            stream: stream,
+        }
+    }
+
+    fn process_in(&mut self,
+                  t: Option<&Token>)
+                  -> EngineResult<Option<<Ctx as RegisterRead>::VarRef>> {
         if t.is_none() {
             return Ok(None);
         }
         let read = match t.unwrap() {
-            Token::ERegister(ref name) | Token::EIdentifier(ref name) => {
-                // TODO: use try! - implement from::From for the error type.
-                self.ctx.read(RefType::RegisterIdent(name.clone())).expect("Register Error")
+            &Token::ERegister(ref name) | &Token::EIdentifier(ref name) => {
+                self.ctx.reg_read(name)
             }
-            Token::EEntry(ref id) => self.intermediates[*id].clone(),
-            Token::EConstant(value) => self.ctx.new_value(value),
-            Token::EAddress => unimplemented!(),
-            _ => panic!("Not an operand"),
+            &Token::EEntry(ref id) => self.intermediates[*id].clone(),
+            &Token::EConstant(value) => self.ctx.define_const(value),
+            &Token::EAddress => unimplemented!(),
+            _ => unreachable!(),
         };
         Ok(Some(read))
     }
 
     fn process_op(&mut self,
                   token: Token,
-                  lhs: Option<Ctx::BV>,
-                  rhs: Option<Ctx::BV>,
+                  lhs: Option<Token>,
+                  rhs: Option<Token>,
                   control: &mut RuneControl)
-                  -> EngineResult<Option<Ctx::BV>> {
+                  -> EngineResult<Option<<Ctx as RegisterRead>::VarRef>> {
 
         // asserts to check validity.
         if token.is_arity_zero() {
             return Ok(None);
         }
 
-        let lhs = lhs.unwrap();
+        let l_op = self.process_in(lhs.as_ref()).ok().unwrap();
+        let r_op = self.process_in(rhs.as_ref()).ok().unwrap();
+        // Since the operator arity us _atleast_ one. assert! that lhs is some.
+        assert!(l_op.is_some());
+        if token.is_binary() {
+            assert!(r_op.is_some());
+        }
+
         // Instructions that do not produce a result
         // Example: Mem Write / Eq / If / EndIf
         match token {
             Token::EEq => {
-                self.ctx.update_bv(&lhs, rhs.unwrap()).expect("Could not set value");
-                return Ok(None);
+                let res = if let Some(Token::ERegister(ref reg)) = lhs {
+                    self.ctx.reg_write(reg, r_op.unwrap());
+                    Ok(None)
+                } else {
+                    Err(EngineError::InCorrectOperand)
+                };
+                return res;
             }
             Token::EIf => {
                 *control = self.explorer.register_branch(&mut self.ctx);
                 return Ok(None);
             }
-            // TODO: Adjust width
-            Token::EPoke(_) => {
-                // Check if the access is a symbolic access.
-                // TODO: We do not support symbolic accesses just yet.
-                if lhs.is_symbolic() {
-                    panic!("Rune has detected a symbolic memory access. \
-                            This feature is not implemented yet.");
-                }
-                self.ctx
-                    .write_mem(RefType::MemAddr(lhs.into()), rhs.as_ref().unwrap())
-                    .expect("Mem Write Error");
+            Token::EPoke(size) => {
+                self.ctx.mem_write(l_op.unwrap(), r_op.unwrap(), size as u64);
                 return Ok(None);
             }
             Token::ENop => return Ok(None),
@@ -112,74 +119,39 @@ where Ctx: Context<Idx = RefType<usize, usize>>,
         }
 
         let result = match token {
-            Token::ECmp => lhs.eq(rhs.as_ref().unwrap()),
-            Token::ELt => lhs.lt(rhs.as_ref().unwrap()),
-            Token::EGt => lhs.gt(rhs.as_ref().unwrap()),
-            Token::EEndIf => unimplemented!(),
-            Token::ELsl => lhs << rhs.unwrap(),
-            Token::ELsr => lhs >> rhs.unwrap(),
-            Token::ERor => unimplemented!(),
-            Token::ERol => unimplemented!(),
-            Token::EAnd => lhs & rhs.unwrap(),
-            Token::EOr => lhs | rhs.unwrap(),
-            Token::ENeg => !lhs,
-            Token::EMul => lhs * rhs.unwrap(),
-            Token::EXor => lhs ^ rhs.unwrap(),
-            Token::EAdd => lhs + rhs.unwrap(),
-            Token::ESub => lhs - rhs.unwrap(),
-            Token::EDiv => lhs / rhs.unwrap(),
-            Token::EMod => lhs % rhs.unwrap(),
-            // TODO: Adjust width.
-            Token::EPeek(_) => {
-                // Check if the access is a symbolic access.
-                // TODO: We do not support symbolic accesses just yet.
-                if lhs.is_symbolic() {
-                    panic!("Rune has detected a symbolic memory access. \
-                            This feature is not implemented yet.");
-                }
-                // TODO: Error conversion trait and use try!
-                self.ctx.read_mem(RefType::MemAddr(lhs.into())).expect("Mem Read Error")
+            Token::EPeek(size) => {
+                self.ctx.mem_read(l_op.unwrap(), size as u64)
             }
             Token::EPop => unimplemented!(),
             Token::EGoto => unimplemented!(),
             Token::EBreak => unimplemented!(),
-            _ => unreachable!(),
+            _ => {
+                let operands = {
+                    if token.is_unary() {
+                        vec![l_op.unwrap()]
+                    } else {
+                        vec![l_op.unwrap(), r_op.unwrap()]
+                    }
+                };
+                self.ctx.eval(token.to_smt(), operands)
+            }
         };
 
         Ok(Some(result))
     }
 
     // Write out to intermediates and return a token to it.
-    fn process_out(&mut self, res: &Ctx::BV) -> Token {
+    fn process_out(&mut self, res: &<Ctx as RegisterRead>::VarRef) -> Token {
         self.intermediates.push(res.clone());
         Token::EEntry(self.intermediates.len() - 1)
     }
 }
 
 impl<Ctx, Exp, S> Engine for Rune<Ctx, Exp, S>
-where Ctx: Context<Idx = RefType<usize, usize>>,
+where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
       Exp: PathExplorer<C = RuneControl, Ctx = Ctx>,
       S: InstructionStream<Output = LOpInfo, Index = u64>
 {
-    type Ctx = Ctx;
-    type Exp = Exp;
-
-    fn new<T>() -> Rune<Ctx, Exp, S>
-        where T: Configure<For = Rune<Ctx, Exp, S>>
-    {
-        let mut rune = Rune {
-            ctx: Self::Ctx::new(),
-            explorer: Self::Exp::new(),
-            intermediates: Vec::new(),
-            stream: S::new(),
-        };
-
-        {
-            T::configure(&mut rune).expect("Config Error");
-        }
-        rune
-    }
-
     fn run(&mut self) -> EngineResult<()> {
         let mut p = Parser::init(None);
         let mut control = RuneControl::Continue;
@@ -204,8 +176,6 @@ where Ctx: Context<Idx = RefType<usize, usize>>,
 
             while let Some(ref token) = p.parse::<_, Tokenizer>(esil) {
                 let (lhs, rhs) = p.fetch_operands(token);
-                let lhs = try!(self.process_in(lhs));
-                let rhs = try!(self.process_in(rhs));
                 if let Ok(Some(ref res)) = self.process_op(token.clone(), lhs, rhs, &mut control) {
                     let rt = self.process_out(res);
                     p.push(rt);
@@ -227,5 +197,34 @@ where Ctx: Context<Idx = RefType<usize, usize>>,
         }
 
         Ok(())
+    }
+}
+
+trait ToSMTFn {
+    fn to_smt(&self) -> qf_abv::QF_ABV_Fn;
+}
+
+// Implement Into<Qf_Abv_Fn> for tokens in order to use them with RuneContext.
+impl ToSMTFn for Token {
+    fn to_smt(&self) -> qf_abv::QF_ABV_Fn {
+        match *self {
+            Token::ECmp => core::OpCodes::Cmp.into(),
+            Token::ELt => bitvec::OpCodes::BvULt.into(),
+            Token::EGt => bitvec::OpCodes::BvUGt.into(),
+            Token::ELsl => bitvec::OpCodes::BvShl.into(),
+            Token::ELsr => bitvec::OpCodes::BvLShr.into(),
+            Token::EAnd => bitvec::OpCodes::BvAnd.into(),
+            Token::EOr => bitvec::OpCodes::BvOr.into(),
+            Token::ENeg => bitvec::OpCodes::BvNeg.into(),
+            Token::EMul => bitvec::OpCodes::BvMul.into(),
+            Token::EXor => bitvec::OpCodes::BvXor.into(),
+            Token::EAdd => bitvec::OpCodes::BvAdd.into(),
+            Token::ESub => bitvec::OpCodes::BvSub.into(),
+            Token::EDiv => bitvec::OpCodes::BvUDiv.into(),
+            Token::EMod => bitvec::OpCodes::BvURem.into(),
+            Token::ERor => unimplemented!(),
+            Token::ERol => unimplemented!(),
+            _ => panic!("This opcode is either unimplemented or is not an opcode at all!"),
+        }
     }
 }

@@ -6,15 +6,12 @@ use explorer::explorer::PathExplorer;
 #[derive(Clone, Copy, Debug)]
 pub enum EngineError {
     Undefined,
+    InCorrectOperand,
 }
 
 pub type EngineResult<T> = Result<T, EngineError>;
 
 pub trait Engine: Sized {
-    type Ctx: Context;
-    type Exp: PathExplorer;
-
-    fn new<T: Configure<For=Self>>() -> Self;
     fn run(&mut self) -> EngineResult<()>;
 }
 
