@@ -192,8 +192,8 @@ impl Context for RuneContext {
         self.ip = to;
     }
 
-    fn define_const(&mut self, c: u64) -> NodeIndex {
-        self.solver.new_const(bitvec::OpCodes::Const(c, 64))
+    fn define_const(&mut self, c: u64, size: usize) -> NodeIndex {
+        self.solver.new_const(bitvec::OpCodes::Const(c, size))
     }
 
     fn alias_of(&self, reg: String) -> Option<String> {

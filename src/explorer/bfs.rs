@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 use explorer::explorer::{PathExplorer};
 use stream::{InstructionStream};
 use engine::rune::RuneControl;
-use context::context::Context;
+use context::context::{Context, RegisterRead};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum BranchType {
@@ -71,7 +71,7 @@ where Ctx: Context {
         }
     }
 
-    fn register_branch(&mut self, ctx: &mut Self::Ctx) -> RuneControl {
+    fn register_branch(&mut self, ctx: &mut Self::Ctx, condition: <Self::Ctx as RegisterRead>::VarRef) -> RuneControl {
         // When rune encounters a conditional branch instruction, it needs to decide which state to
         // explore next. To resolve this, it makes a call to the path explorer which decides on the
         // path to be explored next. Path explorer saves the current context information in order

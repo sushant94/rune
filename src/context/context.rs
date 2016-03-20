@@ -21,7 +21,7 @@ pub trait Context: Clone + Debug
     }
     fn increment_ip(&mut self, u64);
     fn set_ip(&mut self, u64);
-    fn define_const(&mut self, u64) -> <Self as RegisterRead>::VarRef;
+    fn define_const(&mut self, u64, usize) -> <Self as RegisterRead>::VarRef;
     fn alias_of(&self, String) -> Option<String>;
 }
 

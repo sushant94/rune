@@ -67,7 +67,7 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
                 self.ctx.reg_read(name)
             }
             &Token::EEntry(ref id) => self.intermediates[*id].clone(),
-            &Token::EConstant(value) => self.ctx.define_const(value),
+            &Token::EConstant(value) => self.ctx.define_const(value, 64),
             &Token::EAddress => unimplemented!(),
             _ => unreachable!(),
         };
@@ -113,7 +113,7 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
                 return res;
             }
             Token::EIf => {
-                *control = self.explorer.register_branch(&mut self.ctx);
+                *control = self.explorer.register_branch(&mut self.ctx, l_op.unwrap());
                 return Ok(None);
             }
             Token::EPoke(size) => {
