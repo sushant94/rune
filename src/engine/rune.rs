@@ -99,7 +99,13 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
         match token {
             Token::EEq => {
                 let res = if let Some(Token::ERegister(ref reg)) = lhs {
-                    self.ctx.reg_write(reg, r_op.unwrap());
+                    if self.ctx.alias_of(reg.clone()) == Some("PC".to_owned()) {
+                        if let Token::EConstant(const_) = rhs.unwrap() {
+                            self.ctx.set_ip(const_);
+                        }
+                    } else {
+                        self.ctx.reg_write(reg, r_op.unwrap());
+                    }
                     Ok(None)
                 } else {
                     Err(EngineError::InCorrectOperand)
@@ -172,7 +178,7 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
 
             // Increment ip by instruction width
             let width = opinfo.size.as_ref().unwrap();
-            self.ctx.increment_ip(width);
+            self.ctx.increment_ip(*width);
 
             while let Some(ref token) = p.parse::<_, Tokenizer>(esil) {
                 let (lhs, rhs) = p.fetch_operands(token);

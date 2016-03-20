@@ -19,8 +19,10 @@ pub trait Context: Clone + Debug
     fn is_concrete(&self) -> bool {
         !self.is_symbolic()
     }
-    fn increment_ip(&mut self, &u64);
+    fn increment_ip(&mut self, u64);
+    fn set_ip(&mut self, u64);
     fn define_const(&mut self, u64) -> <Self as RegisterRead>::VarRef;
+    fn alias_of(&self, String) -> Option<String>;
 }
 
 pub trait RegisterRead: Sized {

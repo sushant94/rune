@@ -35,6 +35,7 @@ pub struct DFSExplorer<Ctx: Context> {
     queue: VecDeque<SavedState<Ctx>>,
 }
 
+// TODO: Add constraints at T/F branches.
 impl<Ctx> PathExplorer for DFSExplorer<Ctx>
 where Ctx: Context {
     type C = RuneControl;

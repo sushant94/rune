@@ -12,8 +12,11 @@ use libsmt::theories::{array_ex, bitvec, core};
 
 use context::context::{Context, Evaluate, MemoryRead, MemoryWrite, RegisterRead, RegisterWrite};
 
+// TODO: Handle symbolic jumps
+
 #[derive(Clone, Debug)]
 pub struct RuneContext {
+    ip: u64,
     solver: SMTLib2<qf_abv::QF_ABV>,
     regfile: RuneRegFile,
     mem: RuneMemory,
@@ -32,16 +35,24 @@ struct RegEntry {
     start_bit: usize,
     end_bit: usize,
     is_whole: bool,
+    alias: Option<String>,
 }
 
 impl RegEntry {
-    fn new(name: String, idx: usize, sbit: usize, ebit: usize, is_whole: bool) -> RegEntry {
+    fn new(name: String,
+           idx: usize,
+           sbit: usize,
+           ebit: usize,
+           is_whole: bool,
+           alias: Option<String>)
+           -> RegEntry {
         RegEntry {
             name: name,
             idx: idx,
             start_bit: sbit,
             end_bit: ebit,
             is_whole: is_whole,
+            alias: alias,
         }
     }
 }
@@ -77,11 +88,15 @@ impl RuneRegFile {
                 (found, 0, register.size - 1, false)
             };
             regfile.insert(register.name.clone(),
-                           RegEntry::new(register.name.clone(), idx, sbit, ebit, is_whole));
+                           RegEntry::new(register.name.clone(), idx, sbit, ebit, is_whole, None));
         }
 
         for alias in &reginfo.alias_info {
             alias_info.insert(alias.role_str.clone(), alias.reg.clone());
+            // Add this alias info in the corresponding RegEntry too.
+            if let Some(info) = regfile.get_mut(&alias.reg) {
+                info.alias = Some(alias.role_str.clone());
+            }
         }
 
         RuneRegFile {
@@ -96,27 +111,19 @@ impl RuneRegFile {
         let idx = self.current_regs[rentry.idx].unwrap();
         if !rentry.is_whole {
             solver.assert(bitvec::OpCodes::Extract((rentry.end_bit + 1) as u64, 1),
-                               &[idx])
+                          &[idx])
         } else {
             idx
         }
     }
 
-    // TODO: Fix Write. This is incorrect, this corresponds to cmp instruction.
-    fn write(&mut self, dest: &str, source: NodeIndex, solver: &mut SMTLib2<qf_abv::QF_ABV>) -> NodeIndex {
+    // TODO: This is not totally correct as the sizes of registers may not match.
+    fn write(&mut self,
+             dest: &str,
+             source: NodeIndex,
+             solver: &mut SMTLib2<qf_abv::QF_ABV>) {
         let rentry = &self.regfile[dest];
-        if !rentry.is_whole {
-            let widx = self.current_regs[rentry.idx].unwrap();
-            // Add extract operations to trim to correct size of the register.
-            let idx = solver.assert(bitvec::OpCodes::Extract((rentry.end_bit + 1) as u64, 1),
-                                         &[widx]);
-            solver.assert(core::OpCodes::Cmp, &[idx, source])
-        } else {
-            let idx = self.current_regs[rentry.idx].unwrap();
-            let nidx = solver.assert(core::OpCodes::Cmp, &[idx, source]);
-            self.current_regs[rentry.idx] = Some(nidx);
-            nidx
-        }
+        self.current_regs[rentry.idx] = Some(source);
     }
 }
 
@@ -137,7 +144,11 @@ impl RuneMemory {
         self.map = Some(idx);
     }
 
-    pub fn read(&mut self, addr: NodeIndex, read_size: u64, solver: &mut SMTLib2<qf_abv::QF_ABV>) -> NodeIndex {
+    pub fn read(&mut self,
+                addr: NodeIndex,
+                read_size: u64,
+                solver: &mut SMTLib2<qf_abv::QF_ABV>)
+                -> NodeIndex {
         if self.map.is_none() {
             self.init_memory(solver);
         }
@@ -150,7 +161,11 @@ impl RuneMemory {
         }
     }
 
-    pub fn write(&mut self, addr: NodeIndex, data: NodeIndex, write_size: u64, solver: &mut SMTLib2<qf_abv::QF_ABV>) {
+    pub fn write(&mut self,
+                 addr: NodeIndex,
+                 data: NodeIndex,
+                 write_size: u64,
+                 solver: &mut SMTLib2<qf_abv::QF_ABV>) {
         if self.map.is_none() {
             self.init_memory(solver);
         }
@@ -162,19 +177,27 @@ impl RuneMemory {
 
 impl Context for RuneContext {
     fn ip(&self) -> u64 {
-        unimplemented!();
+        self.ip
     }
 
     fn is_symbolic(&self) -> bool {
-        unimplemented!();
+        true
     }
 
-    fn increment_ip(&mut self, by: &u64) {
-        unimplemented!();
+    fn increment_ip(&mut self, by: u64) {
+        self.ip += by;
+    }
+    
+    fn set_ip(&mut self, to: u64) {
+        self.ip = to;
     }
 
     fn define_const(&mut self, c: u64) -> NodeIndex {
-        unimplemented!();
+        self.solver.new_const(bitvec::OpCodes::Const(c, 64))
+    }
+
+    fn alias_of(&self, reg: String) -> Option<String> {
+        self.regfile.regfile[&reg].alias.clone()
     }
 }
 
