@@ -1,4 +1,4 @@
-# rune - Symbolic Execution for Everyone!
+# rune - symbolic execution for everyone
 
 rune is a symbolic execution engine over ESIL. Integrated with radare2 for
 your everyday use!
