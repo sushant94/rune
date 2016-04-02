@@ -7,7 +7,7 @@ use libsmt::theories::core;
 use explorer::explorer::PathExplorer;
 use engine::rune::RuneControl;
 use context::context::{Context, Evaluate, RegisterRead};
-use context::rcontext::RuneContext;
+use context::rune_ctx::RuneContext;
 use stream::InstructionStream;
 
 

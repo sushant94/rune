@@ -1,4 +1,4 @@
-//! Implementation of context for rune.
+//! Defines `RuneContext`
 
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Debug;

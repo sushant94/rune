@@ -1,4 +1,4 @@
-//! Traits that define a `Context`.
+//!  Defines `Context` trait to be used by symbolic emulator
 
 use std::fmt::Debug;
 use std::hash::Hash;

@@ -4,7 +4,7 @@ use r2pipe::structs::LOpInfo;
 use petgraph::graph::NodeIndex;
 
 use context::context::{Context, Evaluate, MemoryRead, MemoryWrite, RegisterRead, RegisterWrite};
-use context::rcontext::RuneContext;
+use context::rune_ctx::RuneContext;
 use explorer::explorer::PathExplorer;
 use stream::InstructionStream;
 use engine::engine::{Configure, Engine, EngineResult, EngineError};

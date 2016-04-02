@@ -3,13 +3,13 @@
 
 use std::fmt::Debug;
 use std::path;
-use rustc_serialize::{Decodable};
-use rustc_serialize::json;
 use std::collections::HashMap;
 use std::hash::Hash;
-
 use std::io::prelude::*;
 use std::fs::File;
+
+use rustc_serialize::{Decodable};
+use rustc_serialize::json;
 
 use r2pipe::structs::LOpInfo;
 use r2pipe::r2::R2;
