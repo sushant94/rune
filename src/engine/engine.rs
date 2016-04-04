@@ -1,8 +1,5 @@
 //! Defines traits and structs that perform the actual symbolic emulation.
 
-use context::context::Context;
-use explorer::explorer::PathExplorer;
-
 #[derive(Clone, Copy, Debug)]
 pub enum EngineError {
     Undefined,

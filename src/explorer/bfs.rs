@@ -1,4 +1,4 @@
-//! PathExplorer that works by exploring the CFG in Breadth First Order.
+//! `PathExplorer` that works by exploring the CFG in Breadth First Order.
 use std::collections::VecDeque;
 
 use explorer::explorer::{PathExplorer};
@@ -71,7 +71,8 @@ where Ctx: Context {
         }
     }
 
-    fn register_branch(&mut self, ctx: &mut Self::Ctx, condition: <Self::Ctx as RegisterRead>::VarRef) -> RuneControl {
+    // TODO: register_branch does not add constraints when adding true/false branch to the list
+    fn register_branch(&mut self, ctx: &mut Self::Ctx, _condition: <Self::Ctx as RegisterRead>::VarRef) -> RuneControl {
         // When rune encounters a conditional branch instruction, it needs to decide which state to
         // explore next. To resolve this, it makes a call to the path explorer which decides on the
         // path to be explored next. Path explorer saves the current context information in order

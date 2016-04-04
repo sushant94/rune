@@ -3,8 +3,6 @@
 use std::fmt::Debug;
 use std::hash::Hash;
 
-use libsmt::backends::smtlib2::SMTProc;
-
 pub trait Context: Clone + Debug
                    + RegisterRead
                    + RegisterWrite<VarRef=<Self as RegisterRead>::VarRef>

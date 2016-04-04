@@ -1,5 +1,5 @@
 //! Defines traits that need to be implemented for a source to be considered as
-//! an InstructionStream.
+//! an `InstructionStream`.
 
 use std::fmt::Debug;
 use std::path;
@@ -21,6 +21,7 @@ pub trait InstructionStream {
     fn new() -> Self;
     fn at(&mut self, Self::Index) -> Option<Self::Output>;
 }
+
 
 impl InstructionStream for R2 {
     type Output = LOpInfo;

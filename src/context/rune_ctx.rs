@@ -1,7 +1,6 @@
 //! Defines `RuneContext`
 
-use std::collections::{BTreeMap, HashMap};
-use std::fmt::Debug;
+use std::collections::HashMap;
 
 use r2pipe::structs::LRegInfo;
 use petgraph::graph::NodeIndex;
@@ -22,12 +21,12 @@ pub struct RuneContext {
     mem: RuneMemory,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct RuneMemory {
     map: Option<NodeIndex>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 struct RegEntry {
     name: String,
     idx: usize,
@@ -57,7 +56,7 @@ impl RegEntry {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct RuneRegFile {
     current_regs: Vec<Option<NodeIndex>>,
     regfile: HashMap<String, RegEntry>,
@@ -72,7 +71,7 @@ impl RuneRegFile {
         let mut alias_info = HashMap::new();
         reginfo.reg_info.sort_by(|x, y| (y.offset + y.size).cmp(&(x.offset + x.size)));
         for register in &reginfo.reg_info {
-            let (idx, sbit, ebit, is_whole) = if !seen_offsets.contains(&register.offset) &&
+            let (idx, s_bit, e_bit, is_whole) = if !seen_offsets.contains(&register.offset) &&
                                                  register.type_str == "gpr" {
                 cur_regs.push(None);
                 seen_offsets.push(register.offset);
@@ -88,7 +87,7 @@ impl RuneRegFile {
                 (found, 0, register.size - 1, false)
             };
             regfile.insert(register.name.clone(),
-                           RegEntry::new(register.name.clone(), idx, sbit, ebit, is_whole, None));
+                           RegEntry::new(register.name.clone(), idx, s_bit, e_bit, is_whole, None));
         }
 
         for alias in &reginfo.alias_info {
@@ -109,19 +108,18 @@ impl RuneRegFile {
     fn read(&mut self, reg_name: &str, solver: &mut SMTLib2<qf_abv::QF_ABV>) -> NodeIndex {
         let rentry = &self.regfile[reg_name];
         let idx = self.current_regs[rentry.idx].unwrap();
-        if !rentry.is_whole {
+        if rentry.is_whole {
+            idx
+        } else {
             solver.assert(bitvec::OpCodes::Extract((rentry.end_bit + 1) as u64, 1),
                           &[idx])
-        } else {
-            idx
         }
     }
 
     // TODO: This is not totally correct as the sizes of registers may not match.
     fn write(&mut self,
              dest: &str,
-             source: NodeIndex,
-             solver: &mut SMTLib2<qf_abv::QF_ABV>) {
+             source: NodeIndex) {
         let rentry = &self.regfile[dest];
         self.current_regs[rentry.idx] = Some(source);
     }
@@ -153,7 +151,7 @@ impl RuneMemory {
             self.init_memory(solver);
         }
         let mem = self.map.unwrap();
-        let mut idx = solver.assert(array_ex::OpCodes::Select, &[mem, addr]);
+        let idx = solver.assert(array_ex::OpCodes::Select, &[mem, addr]);
         if read_size < 64 {
             solver.assert(bitvec::OpCodes::Extract(read_size - 1, 1), &[idx])
         } else {
@@ -164,7 +162,7 @@ impl RuneMemory {
     pub fn write(&mut self,
                  addr: NodeIndex,
                  data: NodeIndex,
-                 write_size: u64,
+                 _write_size: u64,
                  solver: &mut SMTLib2<qf_abv::QF_ABV>) {
         if self.map.is_none() {
             self.init_memory(solver);
@@ -213,7 +211,7 @@ impl RegisterWrite for RuneContext {
     type VarRef = NodeIndex;
 
     fn reg_write<T: AsRef<str>>(&mut self, reg: T, source: NodeIndex) {
-        let _ = self.regfile.write(reg.as_ref(), source, &mut self.solver);
+        self.regfile.write(reg.as_ref(), source);
     }
 }
 

@@ -1,13 +1,12 @@
 //! Trait and struct implementations for rune symbolic engine
 
 use r2pipe::structs::LOpInfo;
-use petgraph::graph::NodeIndex;
 
 use context::context::{Context, Evaluate, MemoryRead, MemoryWrite, RegisterRead, RegisterWrite};
 use context::rune_ctx::RuneContext;
 use explorer::explorer::PathExplorer;
 use stream::InstructionStream;
-use engine::engine::{Configure, Engine, EngineResult, EngineError};
+use engine::engine::{Engine, EngineResult, EngineError};
 use esil::lexer::{Token, Tokenizer};
 use esil::parser::{Parse, Parser};
 
@@ -62,13 +61,13 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
         if t.is_none() {
             return Ok(None);
         }
-        let read = match t.unwrap() {
-            &Token::ERegister(ref name) | &Token::EIdentifier(ref name) => {
+        let read = match *t.unwrap() {
+            Token::ERegister(ref name) | Token::EIdentifier(ref name) => {
                 self.ctx.reg_read(name)
             }
-            &Token::EEntry(ref id) => self.intermediates[*id].clone(),
-            &Token::EConstant(value) => self.ctx.define_const(value, 64),
-            &Token::EAddress => unimplemented!(),
+            Token::EEntry(ref id) => self.intermediates[*id].clone(),
+            Token::EConstant(value) => self.ctx.define_const(value, 64),
+            Token::EAddress => unimplemented!(),
             _ => unreachable!(),
         };
         Ok(Some(read))
@@ -167,7 +166,7 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
                 opinfo_
             } else {
                 // Request for a new state from queue.
-                if let Some(action) = self.explorer.next_job(&mut self.ctx) {
+                if let Some(_) = self.explorer.next_job(&mut self.ctx) {
                     self.stream.at(self.ctx.ip()).unwrap()
                 } else {
                     break;

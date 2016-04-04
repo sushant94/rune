@@ -1,4 +1,4 @@
-//! PathExplorer that works by exploring the CFG in Depth First Order.
+//! `PathExplorer` that works by exploring the CFG in Depth First Order.
 
 use std::collections::VecDeque;
 
