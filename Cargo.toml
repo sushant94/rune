@@ -3,10 +3,14 @@ name = "rune"
 version = "0.1.0"
 authors = ["Sushant <sushant.dinesh94@gmail.com>"]
 
+[features]
+default=[]
+
 [dependencies]
 petgraph = "*"
 rustc-serialize = "*"
 regex = "*"
+clippy = {version = "0.0.61", optional = true}
 
 [dependencies.libsmt]
 path = "../libsmt-rs/"

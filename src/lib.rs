@@ -4,8 +4,8 @@
 //! TODO: Add project notes, descriptions and notes.
 
 // Support for extra lints for clippy
-//#![cfg_attr(feature="clippy", feature(plugin))]
-//#![cfg_attr(feature="clippy", plugin(clippy))]
+#![cfg_attr(feature="clippy", feature(plugin))]
+#![cfg_attr(feature="clippy", plugin(clippy))]
 
 extern crate petgraph;
 extern crate esil;
@@ -16,7 +16,7 @@ extern crate regex;
 
 pub mod context {
     pub mod context;
-    pub mod rcontext;
+    pub mod rune_ctx;
 }
 
 pub mod explorer {
