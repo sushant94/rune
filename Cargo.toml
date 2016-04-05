@@ -6,6 +6,10 @@ authors = ["Sushant <sushant.dinesh94@gmail.com>"]
 [features]
 default=[]
 
+[[bin]]
+name = "runec"
+path = "runec/main.rs"
+
 [dependencies]
 petgraph = "*"
 rustc-serialize = "*"

@@ -8,8 +8,6 @@ use explorer::explorer::PathExplorer;
 use engine::rune::RuneControl;
 use context::context::{Context, Evaluate, RegisterRead};
 use context::rune_ctx::RuneContext;
-use stream::InstructionStream;
-
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[allow(dead_code)]
