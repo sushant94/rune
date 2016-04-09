@@ -34,7 +34,7 @@ impl From<char> for Command {
             'F' => Command::FollowFalse,
             'C' => Command::Continue,
             'S' => Command::Step,
-            _   => Command::Invalid,
+            _ => Command::Invalid,
         }
     }
 }
@@ -50,7 +50,7 @@ impl PathExplorer for InteractiveExplorer {
     type Ctx = RuneContext;
 
     fn new() -> InteractiveExplorer {
-        InteractiveExplorer { 
+        InteractiveExplorer {
             cmd_q: Vec::new(),
             console: Default::default(),
         }
@@ -66,7 +66,8 @@ impl PathExplorer for InteractiveExplorer {
 
     fn register_branch(&mut self,
                        ctx: &mut Self::Ctx,
-                       condition: <Self::Ctx as RegisterRead>::VarRef) -> RuneControl {
+                       condition: <Self::Ctx as RegisterRead>::VarRef)
+                       -> RuneControl {
         if self.cmd_q.is_empty() {
             self.cmd_q = self.console.read_command();
         }
@@ -77,12 +78,12 @@ impl PathExplorer for InteractiveExplorer {
                     let one = ctx.define_const(1, 1);
                     ctx.eval(core::OpCodes::Cmp, &[condition, one]);
                     RuneControl::ExploreTrue
-                },
+                }
                 Command::FollowFalse => {
                     let zero = ctx.define_const(0, 1);
                     ctx.eval(core::OpCodes::Cmp, &[condition, zero]);
                     RuneControl::ExploreFalse
-                },
+                }
                 _ => panic!("Incompatible command"),
             }
         } else {

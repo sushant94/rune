@@ -1,10 +1,10 @@
 //! Defines abstraction `Console`
 //!
-//! TODO: 
+//! TODO:
 //!  - Add colors to prompt
 //!  - Use readline for command history and other goodies
 
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 use std::iter;
 
 use interact::Command;
@@ -32,8 +32,8 @@ impl Console {
     pub fn readline(&self) -> io::Result<String> {
         self.print_prompt();
         let mut buffer = String::new();
-        let res = io::stdin().read_to_string(&mut buffer);
-        res.map(|_| buffer)
+        let res = io::stdin().read_line(&mut buffer);
+        Ok(buffer)
     }
 
     pub fn read_command(&self) -> Vec<Command> {
@@ -48,7 +48,7 @@ impl Console {
                 Command::Invalid
             };
 
-            repeat = buffer.chars().skip(1).fold(0, |acc, c: char| {
+            repeat = buffer.trim().chars().skip(1).fold(0, |acc, c: char| {
                 if c == ' ' {
                     acc
                 } else {
@@ -64,7 +64,8 @@ impl Console {
     }
 
     pub fn print_prompt(&self) {
-        println!("{}", self.prompt);
+        print!("{}", self.prompt);
+        io::stdout().flush().ok().expect("Could not flush stdout");
     }
 
     pub fn print(&self) {

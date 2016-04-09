@@ -33,7 +33,8 @@ impl InstructionStream for R2 {
 
     fn at(&mut self, addr: u64) -> Option<Self::Output> {
         let addr_ = format!("{}", addr);
-        self.get_insts(Some(1), Some(&addr_)).ok().map(|i| i[0].clone())
+        let x = self.get_insts(Some(1), Some(&addr_)).unwrap()[0].clone();
+        Some(x)
     }
 }
 

@@ -89,6 +89,7 @@ impl RuneRegFile {
                 }
                 (found, 0, register.size - 1, false)
             };
+
             regfile.insert(register.name.clone(),
                            RegEntry::new(register.name.clone(), idx, s_bit, e_bit, is_whole, None));
         }
@@ -109,13 +110,13 @@ impl RuneRegFile {
     }
 
     fn read(&mut self, reg_name: &str, solver: &mut SMTLib2<qf_abv::QF_ABV>) -> NodeIndex {
-        let rentry = &self.regfile[reg_name];
-        let idx = self.current_regs[rentry.idx].unwrap();
+        let rentry = &self.regfile.get(reg_name).expect("Unknown Register");
+        let idx = self.current_regs[rentry.idx].expect("Unset register - Undefined Behavior. \
+                                                        Consider setting an initial value before use!");
         if rentry.is_whole {
             idx
         } else {
-            solver.assert(bitvec::OpCodes::Extract((rentry.end_bit) as u64, 0),
-                          &[idx])
+            solver.assert(bitvec::OpCodes::Extract((rentry.end_bit) as u64, 0), &[idx])
         }
     }
 
@@ -230,8 +231,13 @@ impl RegisterWrite for RuneContext {
 
     fn reg_write<T: AsRef<str>>(&mut self, reg: T, source: NodeIndex) {
         let e_old = self.regfile.write(reg.as_ref(), source);
-        self.e_old = e_old;
-        self.e_cur = Some(source);
+        // XXX: THIS IS A HACK!
+        if !reg.as_ref().to_owned().ends_with('f') {
+            self.e_old = e_old;
+            self.e_cur = Some(source);
+            println!("SET OLD TO: {:?}", self.e_old);
+            println!("SET CUR TO: {:?}", self.e_cur);
+        }
     }
 }
 
@@ -259,7 +265,8 @@ impl Evaluate for RuneContext {
         where T: Into<Self::IFn>,
               Q: AsRef<[Self::VarRef]>
     {
-        // TODO: Add extract / concat to ensure that the registers are of compatible sizes for
+        // TODO: Add extract / concat to ensure that the registers are of compatible
+        // sizes for
         // operations.
         self.solver.assert(smt_fn, &operands.as_ref())
     }
@@ -294,7 +301,8 @@ impl ContextAPI for RuneContext {
     }
 
     fn set_mem_as_sym(&mut self, addr: usize, write_size: u64) {
-        assert!(write_size == 64, "TODO: Unimplemented set_mem for size < 64!");
+        assert!(write_size == 64,
+                "TODO: Unimplemented set_mem for size < 64!");
         let sym = self.solver.new_var(Some(format!("mem_{}", addr)), qf_abv::bv_sort(64));
         let addr = self.define_const(addr as u64, 64);
         self.mem_write(addr, sym, write_size);
@@ -302,7 +310,11 @@ impl ContextAPI for RuneContext {
 }
 
 impl RuneContext {
-    pub fn new(ip: Option<u64>, mem: RuneMemory, regfile: RuneRegFile, solver: SMTLib2<qf_abv::QF_ABV>) -> RuneContext {
+    pub fn new(ip: Option<u64>,
+               mem: RuneMemory,
+               regfile: RuneRegFile,
+               solver: SMTLib2<qf_abv::QF_ABV>)
+               -> RuneContext {
         RuneContext {
             ip: ip.unwrap_or(0),
             mem: mem,
@@ -347,7 +359,8 @@ mod test {
 
         ctx.set_reg_as_sym("rax");
 
-        // We set rax to be some value, and add constraints on sub-registers of rax. if all is
+        // We set rax to be some value, and add constraints on sub-registers of rax. if
+        // all is
         // well, these constraints will be consistent and check-sat will return a sat.
         let deadbeef = 0xdeadbeefdeadbeef;
         let const_deadbeef = ctx.define_const(deadbeef, 64);
@@ -499,5 +512,19 @@ mod test {
         // Check
         assert_eq!(ctx.e_old(), const_8);
         assert_eq!(ctx.e_cur(), rax_rbx);
+    }
+
+    #[test]
+    #[should_panic]
+    fn ctx_read_before_set() {
+        let mut ctx = utils::new_ctx(None, None, None);
+        ctx.reg_read("zf");
+    }
+
+    #[test]
+    #[should_panic]
+    fn ctx_invalid_reg() {
+        let mut ctx = utils::new_ctx(None, None, None);
+        ctx.reg_read("asassa");
     }
 }
