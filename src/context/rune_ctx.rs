@@ -301,11 +301,25 @@ impl ContextAPI for RuneContext {
     }
 }
 
+impl RuneContext {
+    pub fn new(ip: Option<u64>, mem: RuneMemory, regfile: RuneRegFile, solver: SMTLib2<qf_abv::QF_ABV>) -> RuneContext {
+        RuneContext {
+            ip: ip.unwrap_or(0),
+            mem: mem,
+            regfile: regfile,
+            solver: solver,
+            e_old: None,
+            e_cur: None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
     use context::context::{Context, ContextAPI, Evaluate, MemoryRead, MemoryWrite, RegisterRead,
                            RegisterWrite};
+    use context::utils;
 
     use libsmt::logics::qf_abv;
     use libsmt::backends::smtlib2::SMTLib2;
@@ -313,36 +327,9 @@ mod test {
     use libsmt::theories::{bitvec, core};
     use libsmt::backends::z3;
 
-    fn new_ctx() -> RuneContext {
-        let rregfile = {
-            use r2pipe::r2::R2;
-            let mut r2 = R2::new(Some("malloc://64".to_owned())).expect("Unable to spawn r2!");
-            r2.send("e asm.bits = 64");
-            r2.send("e asm.arch = x86");
-            r2.flush();
-            let mut lreginfo = r2.get_reg_info()
-                             .expect("Unable to retrieve register information!");
-            r2.close();
-            RuneRegFile::new(&mut lreginfo)
-        };
-
-        let mut rmem = RuneMemory::new();
-        let mut smt = SMTLib2::new(Some(qf_abv::QF_ABV));
-        rmem.init_memory(&mut smt);
-
-        RuneContext {
-            ip: 0,
-            mem: rmem,
-            regfile: rregfile,
-            solver: smt,
-            e_old: None,
-            e_cur: None,
-        }
-    }
-
     #[test]
     fn ctx_reg_write() {
-        let mut ctx = new_ctx();
+        let mut ctx = utils::new_ctx(None, None, None);
         let const_8 = ctx.define_const(8, 64);
 
         // Test setting rax to 8
@@ -356,7 +343,7 @@ mod test {
 
     #[test]
     fn ctx_reg_read() {
-        let mut ctx = new_ctx();
+        let mut ctx = utils::new_ctx(None, None, None);
 
         ctx.set_reg_as_sym("rax");
 
@@ -384,7 +371,7 @@ mod test {
 
     #[test]
     fn ctx_reg_solve_simple() {
-        let mut ctx = new_ctx();
+        let mut ctx = utils::new_ctx(None, None, None);
         // Set rdi and rsi as symbolic
         ctx.set_reg_as_sym("rdi");
         ctx.set_reg_as_sym("rsi");
@@ -416,7 +403,7 @@ mod test {
 
     #[test]
     fn ctx_mem_read_write() {
-        let mut ctx = new_ctx();
+        let mut ctx = utils::new_ctx(None, None, None);
 
         ctx.set_reg_as_sym("rax");
 
@@ -435,7 +422,7 @@ mod test {
 
     #[test]
     fn ctx_mem_sym_read_write() {
-        let mut ctx = new_ctx();
+        let mut ctx = utils::new_ctx(None, None, None);
 
         ctx.set_mem_as_sym(0xff41, 64);
         ctx.set_mem_as_sym(0xfe41, 64);
@@ -457,11 +444,12 @@ mod test {
         ctx.eval(core::OpCodes::Cmp, &[ebx, const_badcafe]);
 
         ctx.solve(&mut solver());
+        // TODO: Test does not assert correctness yet.
     }
 
     #[test]
     fn ctx_test_ip() {
-        let mut ctx = new_ctx();
+        let mut ctx = utils::new_ctx(None, None, None);
 
         ctx.set_ip(0xbadcafe);
         assert_eq!(ctx.ip(), 0xbadcafe);
@@ -472,27 +460,27 @@ mod test {
 
     #[test]
     fn ctx_test_alias() {
-        let ctx = new_ctx();
+        let ctx = utils::new_ctx(None, None, None);
         assert_eq!(ctx.alias_of("rip".to_owned()), Some("PC".to_owned()));
     }
 
     #[test]
     #[should_panic]
     fn ctx_unset_access_esil_old() {
-        let ctx = new_ctx();
+        let ctx = utils::new_ctx(None, None, None);
         ctx.e_old();
     }
 
     #[test]
     #[should_panic]
     fn ctx_unset_access_esil_cur() {
-        let ctx = new_ctx();
+        let ctx = utils::new_ctx(None, None, None);
         ctx.e_cur();
     }
 
     #[test]
     fn ctx_access_esil_old_cur() {
-        let mut ctx = new_ctx();
+        let mut ctx = utils::new_ctx(None, None, None);
         let const_8 = ctx.define_const(8, 64);
         let const_32 = ctx.define_const(32, 64);
 

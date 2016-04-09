@@ -17,6 +17,7 @@ extern crate regex;
 pub mod context {
     pub mod context;
     pub mod rune_ctx;
+    pub mod utils;
 }
 
 pub mod explorer {
