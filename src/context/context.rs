@@ -3,6 +3,10 @@
 use std::fmt::Debug;
 use std::hash::Hash;
 
+use std::collections::HashMap;
+
+use libsmt::backends::smtlib2::SMTProc;
+
 pub trait Context: Clone + Debug
                    + RegisterRead
                    + RegisterWrite<VarRef=<Self as RegisterRead>::VarRef>
@@ -21,6 +25,10 @@ pub trait Context: Clone + Debug
     fn set_ip(&mut self, u64);
     fn define_const(&mut self, u64, usize) -> <Self as RegisterRead>::VarRef;
     fn alias_of(&self, String) -> Option<String>;
+    fn e_old(&self) -> <Self as RegisterRead>::VarRef;
+    fn e_cur(&self) -> <Self as RegisterRead>::VarRef;
+
+    fn solve<S: SMTProc>(&mut self, &mut S) -> HashMap<<Self as RegisterRead>::VarRef, u64>;
 }
 
 pub trait RegisterRead: Sized {
@@ -50,4 +58,15 @@ pub trait Evaluate {
     fn eval<T, Q>(&mut self, T, Q) -> Self::VarRef
         where T: Into<Self::IFn>,
               Q: AsRef<[Self::VarRef]>;
+}
+
+/// Optional trait intended to boost usability of `Context`
+pub trait ContextAPI: Context {
+    // Set register to hold either symbolic or concrete values.
+    fn set_reg_as_const<T: AsRef<str>>(&mut self, T, u64);
+    fn set_reg_as_sym<T: AsRef<str>>(&mut self, T);
+
+    // Set memory to hold either symbolic or concrete valeus.
+    fn set_mem_as_const(&mut self, usize, u64, u64);
+    fn set_mem_as_sym(&mut self, usize, u64);
 }

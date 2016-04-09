@@ -6,7 +6,7 @@ use context::context::{Context, Evaluate, MemoryRead, MemoryWrite, RegisterRead,
 use context::rune_ctx::RuneContext;
 use explorer::explorer::PathExplorer;
 use stream::InstructionStream;
-use engine::engine::{Engine, EngineResult, EngineError};
+use engine::engine::{Engine, EngineError, EngineResult};
 use esil::lexer::{Token, Tokenizer};
 use esil::parser::{Parse, Parser};
 
@@ -37,6 +37,7 @@ pub struct Rune<Ctx, Exp, S>
     /// a part of register or memory
     intermediates: Vec<<Ctx as RegisterRead>::VarRef>,
     stream: S,
+    skip: bool,
 }
 
 
@@ -52,6 +53,7 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
             explorer: exp,
             intermediates: Vec::new(),
             stream: stream,
+            skip: false,
         }
     }
 
@@ -68,6 +70,9 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
             Token::EEntry(ref id) => self.intermediates[*id].clone(),
             Token::EConstant(value) => self.ctx.define_const(value, 64),
             Token::EAddress => unimplemented!(),
+            Token::EOld => self.ctx.e_old(),
+            Token::ECur => self.ctx.e_cur(),
+            Token::ELastsz => self.ctx.define_const(64, 64),
             _ => unreachable!(),
         };
         Ok(Some(read))
@@ -78,8 +83,19 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
                   lhs: Option<Token>,
                   rhs: Option<Token>,
                   control: &mut RuneControl)
-                  -> EngineResult<Option<<Ctx as RegisterRead>::VarRef>> {
+                  -> EngineResult<Option<<Ctx as RegisterRead>::VarRef>>
+    {
+        // Reset previously set `control`
+        *control = RuneControl::Continue;
 
+        // If skip is active, do no further processing.
+        if self.skip {
+            if token == Token::EEndIf {
+                self.skip = false;
+            }
+            return Ok(None);
+        }
+        
         // asserts to check validity.
         if token.is_arity_zero() {
             return Ok(None);
@@ -180,15 +196,30 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
             self.ctx.increment_ip(*width);
 
             while let Some(ref token) = p.parse::<_, Tokenizer>(esil) {
-                let (lhs, rhs) = p.fetch_operands(token);
-                if let Ok(Some(ref res)) = self.process_op(token.clone(), lhs, rhs, &mut control) {
+                // If skip is active, we do not want to modify the esil stack
+                let (lhs, rhs) = if self.skip {
+                    (None, None)
+                } else {
+                    p.fetch_operands(token)
+                };
+
+                if let Ok(Some(ref res)) = self.process_op(token.clone(),
+                                                           lhs,
+                                                           rhs,
+                                                           &mut control) {
                     let rt = self.process_out(res);
                     p.push(rt);
                 }
 
+                // `ExploreTrue` -> Don't skip the section inside the ?{,...,}
+                // `ExploreFalse` -> Skip the section inside the ?{,...,}
                 match control {
-                    RuneControl::ExploreTrue |
-                    RuneControl::ExploreFalse |
+                    RuneControl::ExploreTrue => {
+                        self.skip = false;
+                    },
+                    RuneControl::ExploreFalse => {
+                        self.skip = true;
+                    },
                     RuneControl::Continue => continue,
                     _ => break,
                 }

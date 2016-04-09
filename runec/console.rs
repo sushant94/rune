@@ -5,7 +5,6 @@
 //!  - Use readline for command history and other goodies
 
 use std::io::{self, Read};
-use std::collections::VecDeque;
 use std::iter;
 
 use interact::Command;
@@ -16,7 +15,6 @@ static OUTPUT: &'static str = "< ";
 
 #[derive(Clone, Debug)]
 pub struct Console {
-    cmd_q: VecDeque<Command>,
     prompt: String,
     out_prompt: String,
 }
@@ -24,7 +22,6 @@ pub struct Console {
 impl Default for Console {
     fn default() -> Console {
         Console {
-            cmd_q: VecDeque::new(),
             prompt: PROMPT.to_owned(),
             out_prompt: OUTPUT.to_owned(),
         }
@@ -39,13 +36,9 @@ impl Console {
         res.map(|_| buffer)
     }
 
-    pub fn read_command(&mut self) -> Command {
-        let mut cmd = self.cmd_q.pop_front().unwrap_or(Command::Invalid);
+    pub fn read_command(&self) -> Vec<Command> {
+        let mut cmd;
         let mut repeat;
-
-        if cmd.is_valid() {
-            return cmd;
-        }
 
         loop {
             let buffer = self.readline().expect("Read failed!");
@@ -67,11 +60,7 @@ impl Console {
                 break;
             }
         }
-
-        if repeat > 0 {
-            self.cmd_q = iter::repeat(cmd).take(repeat as usize).collect();
-        }
-        cmd
+        iter::repeat(cmd).take(repeat as usize + 1).collect::<Vec<_>>()
     }
 
     pub fn print_prompt(&self) {

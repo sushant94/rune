@@ -4,6 +4,7 @@
 //! binary reasoning.
 
 extern crate rune;
+extern crate libsmt;
 
 mod interact;
 mod console;
