@@ -156,6 +156,15 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
             Token::EPeek(size) => {
                 self.ctx.mem_read(l_op.unwrap(), size as u64)
             }
+            Token::ECmp | Token::ELt | Token::EGt => {
+                // This case is a bit different as we want the result to be a bitvector rather than
+                // a bool. Hence we adopt the following stratergy:
+                // (ite (= lhs rhs) (_ bv1 64) (_ bv0 64))
+                let const_0 = self.ctx.define_const(0, 64);
+                let const_1 = self.ctx.define_const(1, 64);
+                let eq = self.ctx.eval(token.to_smt(), vec![l_op.unwrap(), r_op.unwrap()]);
+                self.ctx.eval(core::OpCodes::ITE, vec![eq, const_1, const_0])
+            },
             Token::EPop => unimplemented!(),
             Token::EGoto => unimplemented!(),
             Token::EBreak => unimplemented!(),

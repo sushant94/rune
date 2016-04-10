@@ -14,6 +14,7 @@ pub enum Command {
     FollowFalse,
     Continue,
     Step,
+    Debug,
     Invalid,
 }
 
@@ -34,6 +35,7 @@ impl From<char> for Command {
             'F' => Command::FollowFalse,
             'C' => Command::Continue,
             'S' => Command::Step,
+            'D' => Command::Debug,
             _ => Command::Invalid,
         }
     }
@@ -46,6 +48,13 @@ pub struct InteractiveExplorer {
     single_step: bool,
     // TODO: Remove this breakpointing feature once BPs are implemented.
     pub bp: Vec<u64>,
+}
+
+impl InteractiveExplorer {
+    pub fn print_debug(&self, ctx: &RuneContext) {
+        self.console.print_info("DEBUG");
+        self.console.print_info(&format!("Constraints:\n{}", ctx.solver.generate_asserts()));
+    }
 }
 
 impl PathExplorer for InteractiveExplorer {
@@ -64,11 +73,20 @@ impl PathExplorer for InteractiveExplorer {
     fn next(&mut self, ctx: &mut Self::Ctx) -> RuneControl {
         if self.single_step || self.bp.contains(&ctx.ip()) {
             self.console.print_info(&format!("Halted at {:#x}", ctx.ip()));
-            self.single_step = match self.console.read_command()[0] {
-                Command::Step => true,
-                Command::Continue => false,
-                _ => panic!("Invalid directive!"),
-            };
+            loop{
+                self.single_step = match self.console.read_command()[0] {
+                    Command::Step => true,
+                    Command::Continue => false,
+                    Command::Debug => {
+                        self.print_debug(ctx);
+                        continue;
+                    },
+                    _ => {
+                        continue;
+                    }
+                };
+                break;
+            }
         }
         RuneControl::Continue
     }
