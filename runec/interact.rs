@@ -10,6 +10,22 @@ use libsmt::logics::qf_abv::QF_ABV_Fn;
 use libsmt::backends::z3;
 use console::Console;
 
+const HELP: &'static str = "runec help menu:
+
+Branch Follow Commands:
+  T     Follow `True` branch
+  F     Follow `False` branch
+
+Interpretter Commands:
+  C     Continue Execution
+  S     Single Step Instruction
+  D     Print Debug information
+  ?     Add Assertion
+  Q     Query Constraint Solver
+  X     Add safety assertions
+  H     Print Help Menu
+";
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Command {
     FollowTrue,
@@ -18,6 +34,9 @@ pub enum Command {
     Step,
     Debug,
     Assertion,
+    Query,
+    Help,
+    Safety,
     Invalid,
 }
 
@@ -40,6 +59,9 @@ impl From<char> for Command {
             'S' => Command::Step,
             'D' => Command::Debug,
             '?' => Command::Assertion,
+            'Q' => Command::Query,
+            'H' => Command::Help,
+            'X' => Command::Safety,
             _ => Command::Invalid,
         }
     }
@@ -55,9 +77,36 @@ pub struct InteractiveExplorer {
 }
 
 impl InteractiveExplorer {
+    pub fn help(&self) {
+        self.console.print_info(HELP);
+    }
+
+    // Adds Assertions for safety.
+    pub fn safety(&self, ctx: &mut RuneContext) {
+        let rbp = ctx.reg_read("rbp");
+        let const_8 = ctx.define_const(8, 64);
+        let ret_addr = ctx.eval(bitvec::OpCodes::BvAdd, vec![rbp, const_8]);
+        // Add an assertion to check if that memory address can be junk (0x41414141)
+        let const_trash = ctx.define_const(0x41414141, 64);
+        let mem_at_addr = ctx.mem_read(ret_addr, 64);
+        ctx.eval(core::OpCodes::Cmp, vec![mem_at_addr, const_trash]);
+    }
+
     pub fn print_debug(&self, ctx: &RuneContext) {
         self.console.print_info("DEBUG");
         self.console.print_info(&format!("Constraints:\n{}", ctx.solver.generate_asserts()));
+    }
+
+    pub fn query_constraints(&self, ctx: &mut RuneContext) {
+        let mut z3: z3::Z3 = Default::default();
+        let result = ctx.solve(&mut z3);
+
+        self.console.print_success("Results:");
+        for (k, v) in &ctx.syms {
+            if let Some(res) = result.get(v) {
+                self.console.print_success(&format!("{} = {:#x}", k, res))
+            }
+        }
     }
 
     pub fn add_assertion(&self, ctx: &mut RuneContext) {
@@ -101,20 +150,8 @@ impl InteractiveExplorer {
                     ctx.reg_read(tokens[2])
                 }
             };
-
             ctx.eval(cmd, vec![op_1, op_2]);
-
-            self.print_debug(ctx);
-
-            let mut z3: z3::Z3 = Default::default();
-            let result = ctx.solve(&mut z3);
-
-            self.console.print_success("Results:");
-            for (k, v) in &ctx.syms {
-                if let Some(res) = result.get(v) {
-                    self.console.print_success(&format!("{} = {:#x}", k, res))
-                }
-            }
+            self.console.print_success("Constraint Added!");
         }
     }
 }
@@ -147,6 +184,18 @@ impl PathExplorer for InteractiveExplorer {
                         self.add_assertion(ctx);
                         continue;
                     }
+                    Command::Query => {
+                        self.query_constraints(ctx);
+                        continue;
+                    }
+                    Command::Help => {
+                        self.help();
+                        continue;
+                    }
+                    Command::Safety => {
+                        self.safety(ctx);
+                        continue;
+                    }
                     _ => {
                         continue;
                     }
@@ -173,12 +222,12 @@ impl PathExplorer for InteractiveExplorer {
         if let Some(cmd) = self.cmd_q.pop() {
             match cmd {
                 Command::FollowTrue => {
-                    let one = ctx.define_const(1, 1);
+                    let one = ctx.define_const(1, 64);
                     ctx.eval(core::OpCodes::Cmp, &[condition, one]);
                     RuneControl::ExploreTrue
                 }
                 Command::FollowFalse => {
-                    let zero = ctx.define_const(0, 1);
+                    let zero = ctx.define_const(0, 64);
                     ctx.eval(core::OpCodes::Cmp, &[condition, zero]);
                     RuneControl::ExploreFalse
                 }

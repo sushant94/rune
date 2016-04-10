@@ -101,7 +101,7 @@ fn main() {
         breakpoints.push(addr);
     }
 
-    let mut ctx = utils::new_ctx(args.flag_start, Some(sym_vars), Some(const_vars));
+    let ctx = utils::new_ctx(args.flag_start, Some(sym_vars), Some(const_vars));
     let mut explorer = InteractiveExplorer::new();
     explorer.bp = breakpoints;
     let mut stream = R2::new(Some(args.arg_file)).expect("Unable to spawn r2");

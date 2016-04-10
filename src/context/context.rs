@@ -31,6 +31,8 @@ pub trait Context: Clone + Debug
     fn solve<S: SMTProc>(&mut self, &mut S) -> HashMap<<Self as RegisterRead>::VarRef, u64>;
 
     fn var_named<T: AsRef<str>>(& self, T) -> Option<<Self as RegisterRead>::VarRef>;
+    fn set_e_old(&mut self, <Self as RegisterRead>::VarRef);
+    fn set_e_cur(&mut self, <Self as RegisterRead>::VarRef);
 }
 
 pub trait RegisterRead: Sized {

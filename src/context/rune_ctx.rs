@@ -181,6 +181,14 @@ impl RuneMemory {
 }
 
 impl Context for RuneContext {
+    fn set_e_old(&mut self, i: NodeIndex) {
+        self.e_old = Some(i);
+    }
+    
+    fn set_e_cur(&mut self, i: NodeIndex) {
+        self.e_cur = Some(i);
+    }
+
     fn e_old(&self) -> NodeIndex {
         assert!(self.e_old.is_some(), "e_old accessed before being set!");
         self.e_old.unwrap()

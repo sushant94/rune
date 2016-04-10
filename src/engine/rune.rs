@@ -77,7 +77,7 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
             Token::EAddress => {
                 let ip = self.ctx.ip();
                 self.ctx.define_const(ip, 64)
-            },
+            }
             Token::EOld => self.ctx.e_old(),
             Token::ECur => self.ctx.e_cur(),
             Token::ELastsz => self.ctx.define_const(64, 64),
@@ -91,8 +91,7 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
                   lhs: Option<Token>,
                   rhs: Option<Token>,
                   control: &mut RuneControl)
-                  -> EngineResult<Option<<Ctx as RegisterRead>::VarRef>>
-    {
+                  -> EngineResult<Option<<Ctx as RegisterRead>::VarRef>> {
         // Reset previously set `control`
         *control = RuneControl::Continue;
 
@@ -108,9 +107,9 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
         if token.is_arity_zero() {
             return Ok(None);
         }
-        //println!("****");
+        // println!("****");
 
-        //println!("OPERANDS TO {:?}: {:?} {:?}", token, lhs, rhs);
+        // println!("OPERANDS TO {:?}: {:?} {:?}", token, lhs, rhs);
         let l_op = self.process_in(lhs.as_ref()).expect("LHS is ERR");
         let r_op = self.process_in(rhs.as_ref()).expect("RHS is ERR");
         // Since the operator arity us _atleast_ one. assert! that lhs is some.
@@ -129,7 +128,7 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
                             self.ctx.set_ip(const_);
                         }
                     } else {
-                        //println!("REGISTER WRITE: {:?} = {:?}", reg, r_op);
+                        // println!("REGISTER WRITE: {:?} = {:?}", reg, r_op);
                         self.ctx.reg_write(reg, r_op.unwrap());
                     }
                     Ok(None)
@@ -155,14 +154,21 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
                 self.ctx.mem_read(l_op.unwrap(), size as u64)
             }
             Token::ECmp | Token::ELt | Token::EGt => {
-                // This case is a bit different as we want the result to be a bitvector rather than
+                // This case is a bit different as we want the result to be a bitvector rather
+                // than
                 // a bool. Hence we adopt the following stratergy:
                 // (ite (= lhs rhs) (_ bv1 64) (_ bv0 64))
+                // FIXME: Set esil_old and esil_cur
+                let e_cur = self.ctx.eval(bitvec::OpCodes::BvSub,
+                                          vec![l_op.as_ref().unwrap().clone(),
+                                               r_op.as_ref().unwrap().clone()]);
+                self.ctx.set_e_cur(e_cur);
+                self.ctx.set_e_old(l_op.as_ref().unwrap().clone());
                 let const_0 = self.ctx.define_const(0, 64);
                 let const_1 = self.ctx.define_const(1, 64);
                 let eq = self.ctx.eval(token.to_smt(), vec![l_op.unwrap(), r_op.unwrap()]);
                 self.ctx.eval(core::OpCodes::ITE, vec![eq, const_1, const_0])
-            },
+            }
             Token::EPop => unimplemented!(),
             Token::EGoto => unimplemented!(),
             Token::EBreak => unimplemented!(),
@@ -198,7 +204,7 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
         let mut control = RuneControl::Continue;
 
         loop {
-            //println!("{}", self.ctx.ip());
+            // println!("{}", self.ctx.ip());
             let opinfo = if let Some(opinfo_) = self.stream.at(self.ctx.ip()) {
                 opinfo_
             } else {
@@ -212,14 +218,14 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
 
             let esil = opinfo.esil.as_ref().unwrap();
 
-            //println!("{}", esil);
+            // println!("{}", esil);
 
             // Increment ip by instruction width
             let width = opinfo.size.as_ref().unwrap();
             self.ctx.increment_ip(*width);
 
             while let Some(ref token) = p.parse::<_, Tokenizer>(esil) {
-                //println!("{:?}", token);
+                // println!("{:?}", token);
                 // If skip is active, we do not want to modify the esil stack
                 let (lhs, rhs) = if self.skip {
                     (None, None)
@@ -227,10 +233,7 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
                     p.fetch_operands(token)
                 };
 
-                if let Ok(Some(ref res)) = self.process_op(token.clone(),
-                                                           lhs,
-                                                           rhs,
-                                                           &mut control) {
+                if let Ok(Some(ref res)) = self.process_op(token.clone(), lhs, rhs, &mut control) {
                     let rt = self.process_out(res);
                     p.push(rt);
                 }
@@ -240,10 +243,10 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
                 match control {
                     RuneControl::ExploreTrue => {
                         self.skip = false;
-                    },
+                    }
                     RuneControl::ExploreFalse => {
                         self.skip = true;
-                    },
+                    }
                     RuneControl::Continue => continue,
                     _ => break,
                 }
