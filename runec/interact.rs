@@ -43,6 +43,9 @@ impl From<char> for Command {
 pub struct InteractiveExplorer {
     console: Console,
     cmd_q: Vec<Command>,
+    single_step: bool,
+    // TODO: Remove this breakpointing feature once BPs are implemented.
+    pub bp: Vec<u64>,
 }
 
 impl PathExplorer for InteractiveExplorer {
@@ -53,10 +56,20 @@ impl PathExplorer for InteractiveExplorer {
         InteractiveExplorer {
             cmd_q: Vec::new(),
             console: Default::default(),
+            single_step: false,
+            bp: Vec::new(),
         }
     }
 
-    fn next(&mut self, _: &mut Self::Ctx) -> RuneControl {
+    fn next(&mut self, ctx: &mut Self::Ctx) -> RuneControl {
+        if self.single_step || self.bp.contains(&ctx.ip()) {
+            self.console.print_info(&format!("Halted at {:#x}", ctx.ip()));
+            self.single_step = match self.console.read_command()[0] {
+                Command::Step => true,
+                Command::Continue => false,
+                _ => panic!("Invalid directive!"),
+            };
+        }
         RuneControl::Continue
     }
 
@@ -69,6 +82,7 @@ impl PathExplorer for InteractiveExplorer {
                        condition: <Self::Ctx as RegisterRead>::VarRef)
                        -> RuneControl {
         if self.cmd_q.is_empty() {
+            self.console.print_info(&format!("Encountered Branch At {:#x}", ctx.ip()));
             self.cmd_q = self.console.read_command();
         }
 

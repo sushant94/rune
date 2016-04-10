@@ -21,7 +21,7 @@ use rune::engine::rune::Rune;
 use rune::engine::engine::Engine;
 use interact::InteractiveExplorer;
 use r2pipe::r2::R2;
-use rune::stream::{InstructionStream};
+use rune::stream::InstructionStream;
 
 static USAGE: &'static str = "
 runec. Interactive console for rune.
@@ -35,14 +35,14 @@ Options:
                                          Example: --const=rbp:0x1000,rsp:0x1100
   --sym=<sym_vars>                       Registers/Memory address to be set as symbolic.
                                          Example: --sym=rsi,rdi,0x1000
-  -bp --break=<bp_list>                  Set breakpoints at addresses.
+  -b --break=<bp_list>                   Set breakpoints at addresses.
   -h --help                              Show this screen.
 ";
 
 #[derive(Debug, Clone, RustcDecodable)]
 struct Args {
     flag_help: bool,
-    flag_break: Option<Vec<u64>>,
+    flag_break: Option<String>,
     flag_sym: Option<String>,
     flag_const: Option<String>,
     flag_start: Option<u64>,
@@ -83,12 +83,30 @@ fn main() {
                              })
                          })
                          .collect::<HashMap<_, _>>();
+
+    let mut breakpoints = args.flag_break
+                          .unwrap_or_default()
+                          .split(',')
+                          .map(|x| {
+                              let b = x.to_owned();
+                              if b.starts_with("0x") {
+                                  u64::from_str_radix(&b[2..], 16).expect("Invalid base16 integer")
+                              } else {
+                                  u64::from_str_radix(&b, 10).expect("Invalid base10 integer")
+                              }
+                          })
+                          .collect::<Vec<_>>();
+
+    if let Some(addr) = args.flag_end {
+        breakpoints.push(addr);
+    }
+
     let mut ctx = utils::new_ctx(args.flag_start, Some(sym_vars), Some(const_vars));
     let mut explorer = InteractiveExplorer::new();
+    explorer.bp = breakpoints;
     let mut stream = R2::new(Some(args.arg_file)).expect("Unable to spawn r2");
     stream.init();
 
     let mut rune = Rune::new(ctx, explorer, stream);
     rune.run().expect("Rune Error:");
-
 }
