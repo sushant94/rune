@@ -29,6 +29,8 @@ pub trait Context: Clone + Debug
     fn e_cur(&self) -> <Self as RegisterRead>::VarRef;
 
     fn solve<S: SMTProc>(&mut self, &mut S) -> HashMap<<Self as RegisterRead>::VarRef, u64>;
+
+    fn var_named<T: AsRef<str>>(& self, T) -> Option<<Self as RegisterRead>::VarRef>;
 }
 
 pub trait RegisterRead: Sized {
@@ -61,12 +63,21 @@ pub trait Evaluate {
 }
 
 /// Optional trait intended to boost usability of `Context`
+/// NOTE: All functions that are descibed in `ContextAPI` must be composed of one or more functions
+/// from `Context`. That is, there must be no loss of functionality by not implementing
+/// `ContextAPI`.
 pub trait ContextAPI: Context {
-    // Set register to hold either symbolic or concrete values.
-    fn set_reg_as_const<T: AsRef<str>>(&mut self, T, u64);
-    fn set_reg_as_sym<T: AsRef<str>>(&mut self, T);
+    /// Set register to hold either symbolic or concrete values.
+    fn set_reg_as_const<T: AsRef<str>>(&mut self, T, u64) -> <Self as RegisterRead>::VarRef;
+    fn set_reg_as_sym<T: AsRef<str>>(&mut self, T) -> <Self as RegisterRead>::VarRef;
 
-    // Set memory to hold either symbolic or concrete valeus.
-    fn set_mem_as_const(&mut self, usize, u64, u64);
-    fn set_mem_as_sym(&mut self, usize, u64);
+    /// Set memory to hold either symbolic or concrete values.
+    fn set_mem_as_const(&mut self, usize, u64, u64) -> <Self as RegisterRead>::VarRef;
+    fn set_mem_as_sym(&mut self, usize, u64) -> <Self as RegisterRead>::VarRef;
+
+    /// Set registers that are not set to be a constant zero.
+    fn zero_registers(&mut self);
+
+    /// An iterator over registers.
+    fn registers(&self) -> Vec<String>;
 }

@@ -22,6 +22,8 @@ pub struct RuneContext {
     mem: RuneMemory,
     e_old: Option<NodeIndex>,
     e_cur: Option<NodeIndex>,
+    /// FIXME
+    pub syms: HashMap<String, NodeIndex>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -216,6 +218,10 @@ impl Context for RuneContext {
     fn solve<S: SMTProc>(&mut self, p: &mut S) -> HashMap<NodeIndex, u64> {
         self.solver.solve(p).expect("No satisfying solution.")
     }
+
+    fn var_named<T: AsRef<str>>(&self, var: T) -> Option<NodeIndex> {
+        self.syms.get(var.as_ref()).cloned()
+    }
 }
 
 impl RegisterRead for RuneContext {
@@ -235,8 +241,6 @@ impl RegisterWrite for RuneContext {
         if !reg.as_ref().to_owned().ends_with('f') {
             self.e_old = e_old;
             self.e_cur = Some(source);
-            println!("SET OLD TO: {:?}", self.e_old);
-            println!("SET CUR TO: {:?}", self.e_cur);
         }
     }
 }
@@ -273,23 +277,26 @@ impl Evaluate for RuneContext {
 }
 
 impl ContextAPI for RuneContext {
-    fn set_reg_as_const<T: AsRef<str>>(&mut self, reg: T, val: u64) {
+    fn set_reg_as_const<T: AsRef<str>>(&mut self, reg: T, val: u64) -> NodeIndex {
         let rentry = self.regfile.regfile[reg.as_ref()].clone();
         // Assert that the register is not currently set/defined.
         assert!(self.regfile.current_regs[rentry.idx].is_none());
         let cval = self.define_const(val, 64);
         self.regfile.current_regs[rentry.idx] = Some(cval);
+        cval
     }
 
-    fn set_reg_as_sym<T: AsRef<str>>(&mut self, reg: T) {
+    fn set_reg_as_sym<T: AsRef<str>>(&mut self, reg: T) -> NodeIndex {
         let rentry = self.regfile.regfile[reg.as_ref()].clone();
         // Assert that the register is not currently set/defined.
         assert!(self.regfile.current_regs[rentry.idx].is_none());
-        let sym = self.solver.new_var(Some(reg), qf_abv::bv_sort(64));
+        let sym = self.solver.new_var(Some(reg.as_ref()), qf_abv::bv_sort(64));
         self.regfile.current_regs[rentry.idx] = Some(sym);
+        self.syms.insert(reg.as_ref().to_owned(), sym);
+        sym
     }
 
-    fn set_mem_as_const(&mut self, addr: usize, val: u64, write_size: u64) {
+    fn set_mem_as_const(&mut self, addr: usize, val: u64, write_size: u64) -> NodeIndex {
         let cval = self.define_const(val, write_size as usize);
         let addr = self.define_const(addr as u64, 64);
         // TODO
@@ -298,14 +305,31 @@ impl ContextAPI for RuneContext {
         } else {
             self.mem_write(addr, cval, 64);
         }
+        cval
     }
 
-    fn set_mem_as_sym(&mut self, addr: usize, write_size: u64) {
+    fn set_mem_as_sym(&mut self, addr: usize, write_size: u64) -> NodeIndex {
         assert!(write_size == 64,
                 "TODO: Unimplemented set_mem for size < 64!");
-        let sym = self.solver.new_var(Some(format!("mem_{}", addr)), qf_abv::bv_sort(64));
+        let key = format!("mem_{}", addr);
+        let sym = self.solver.new_var(Some(&key), qf_abv::bv_sort(64));
         let addr = self.define_const(addr as u64, 64);
         self.mem_write(addr, sym, write_size);
+        self.syms.insert(key, sym);
+        sym
+    }
+
+    fn zero_registers(&mut self) {
+        let cval = Some(self.define_const(0, 64));
+        for reg in &mut self.regfile.current_regs {
+            if reg.is_none() {
+                *reg = cval;
+            }
+        }
+    }
+
+    fn registers(&self) -> Vec<String> {
+        unimplemented!();
     }
 }
 
@@ -322,6 +346,7 @@ impl RuneContext {
             solver: solver,
             e_old: None,
             e_cur: None,
+            syms: HashMap::new(),
         }
     }
 }

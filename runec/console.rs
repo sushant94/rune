@@ -32,7 +32,7 @@ impl Console {
     pub fn readline(&self) -> io::Result<String> {
         self.print_prompt();
         let mut buffer = String::new();
-        let res = io::stdin().read_line(&mut buffer);
+        io::stdin().read_line(&mut buffer);
         Ok(buffer)
     }
 

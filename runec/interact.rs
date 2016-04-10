@@ -3,9 +3,11 @@
 use rune::explorer::explorer::PathExplorer;
 use rune::context::rune_ctx::RuneContext;
 use rune::engine::rune::RuneControl;
-use rune::context::context::{Context, Evaluate, RegisterRead};
+use rune::context::context::{Context, Evaluate, MemoryRead, RegisterRead};
 
-use libsmt::theories::core;
+use libsmt::theories::{bitvec, core};
+use libsmt::logics::qf_abv::QF_ABV_Fn;
+use libsmt::backends::z3;
 use console::Console;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -15,6 +17,7 @@ pub enum Command {
     Continue,
     Step,
     Debug,
+    Assertion,
     Invalid,
 }
 
@@ -36,6 +39,7 @@ impl From<char> for Command {
             'C' => Command::Continue,
             'S' => Command::Step,
             'D' => Command::Debug,
+            '?' => Command::Assertion,
             _ => Command::Invalid,
         }
     }
@@ -55,6 +59,64 @@ impl InteractiveExplorer {
         self.console.print_info("DEBUG");
         self.console.print_info(&format!("Constraints:\n{}", ctx.solver.generate_asserts()));
     }
+
+    pub fn add_assertion(&self, ctx: &mut RuneContext) {
+        self.console.print_info("Adding assertions");
+        self.console.print_info("(operation) (register) (register/constant in hex)");
+        self.console.print_info("Valid Operations: =, >, <, <=, >=");
+
+        if let Ok(ref line) = self.console.readline() {
+            // Format for adding assertions:
+            // (operation) (register) (register/constant in hex)
+            // Valid Operations: =, >, <, <=, >=
+            let tokens = line.trim().split(' ').collect::<Vec<&str>>();
+            let cmd: QF_ABV_Fn = match tokens[0] {
+                ">=" => bitvec::OpCodes::BvUGe.into(),
+                "<=" => bitvec::OpCodes::BvULe.into(),
+                ">" => bitvec::OpCodes::BvUGt.into(),
+                "<" => bitvec::OpCodes::BvULt.into(),
+                "=" => core::OpCodes::Cmp.into(),
+                _ => panic!("Invalid"),
+            };
+
+            let op_1 = {
+                if &tokens[1][0..1] == "[" {
+                    let addr = {
+                        let addr_ = u64::from_str_radix(&tokens[1][3..tokens[1].len() - 1], 16)
+                                        .expect("Invalid integer base16");
+                        ctx.define_const(addr_, 64)
+                    };
+                    ctx.mem_read(addr, 64)
+                } else {
+                    ctx.reg_read(tokens[1])
+                }
+            };
+
+            let op_2 = {
+                if tokens[2].len() > 2 && &tokens[2][0..2] == "0x" {
+                    let const_v = u64::from_str_radix(&tokens[2][2..], 16)
+                                      .expect("Invalid base16 Integer");
+                    ctx.define_const(const_v, 64)
+                } else {
+                    ctx.reg_read(tokens[2])
+                }
+            };
+
+            ctx.eval(cmd, vec![op_1, op_2]);
+
+            self.print_debug(ctx);
+
+            let mut z3: z3::Z3 = Default::default();
+            let result = ctx.solve(&mut z3);
+
+            self.console.print_success("Results:");
+            for (k, v) in &ctx.syms {
+                if let Some(res) = result.get(v) {
+                    self.console.print_success(&format!("{} = {:#x}", k, res))
+                }
+            }
+        }
+    }
 }
 
 impl PathExplorer for InteractiveExplorer {
@@ -73,14 +135,18 @@ impl PathExplorer for InteractiveExplorer {
     fn next(&mut self, ctx: &mut Self::Ctx) -> RuneControl {
         if self.single_step || self.bp.contains(&ctx.ip()) {
             self.console.print_info(&format!("Halted at {:#x}", ctx.ip()));
-            loop{
+            loop {
                 self.single_step = match self.console.read_command()[0] {
                     Command::Step => true,
                     Command::Continue => false,
                     Command::Debug => {
                         self.print_debug(ctx);
                         continue;
-                    },
+                    }
+                    Command::Assertion => {
+                        self.add_assertion(ctx);
+                        continue;
+                    }
                     _ => {
                         continue;
                     }

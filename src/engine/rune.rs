@@ -108,9 +108,9 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
         if token.is_arity_zero() {
             return Ok(None);
         }
-        println!("****");
+        //println!("****");
 
-        println!("OPERANDS TO {:?}: {:?} {:?}", token, lhs, rhs);
+        //println!("OPERANDS TO {:?}: {:?} {:?}", token, lhs, rhs);
         let l_op = self.process_in(lhs.as_ref()).expect("LHS is ERR");
         let r_op = self.process_in(rhs.as_ref()).expect("RHS is ERR");
         // Since the operator arity us _atleast_ one. assert! that lhs is some.
@@ -123,19 +123,17 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
         // Example: Mem Write / Eq / If / EndIf
         match token {
             Token::EEq => {
-                println!("In EEQ");
                 let res = if let Some(Token::EIdentifier(ref reg)) = lhs {
                     if self.ctx.alias_of(reg.clone()) == Some("PC".to_owned()) {
                         if let Token::EConstant(const_) = rhs.unwrap() {
                             self.ctx.set_ip(const_);
                         }
                     } else {
-                        println!("REGISTER WRITE: {:?} = {:?}", reg, r_op);
+                        //println!("REGISTER WRITE: {:?} = {:?}", reg, r_op);
                         self.ctx.reg_write(reg, r_op.unwrap());
                     }
                     Ok(None)
                 } else {
-                    println!("In EEQ XXXXXX {:?} {:?}", lhs, rhs);
                     Err(EngineError::InCorrectOperand)
                 };
                 return res;
@@ -200,7 +198,7 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
         let mut control = RuneControl::Continue;
 
         loop {
-            println!("{}", self.ctx.ip());
+            //println!("{}", self.ctx.ip());
             let opinfo = if let Some(opinfo_) = self.stream.at(self.ctx.ip()) {
                 opinfo_
             } else {
@@ -214,14 +212,14 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
 
             let esil = opinfo.esil.as_ref().unwrap();
 
-            println!("{}", esil);
+            //println!("{}", esil);
 
             // Increment ip by instruction width
             let width = opinfo.size.as_ref().unwrap();
             self.ctx.increment_ip(*width);
 
             while let Some(ref token) = p.parse::<_, Tokenizer>(esil) {
-                println!("{:?}", token);
+                //println!("{:?}", token);
                 // If skip is active, we do not want to modify the esil stack
                 let (lhs, rhs) = if self.skip {
                     (None, None)

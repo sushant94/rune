@@ -46,19 +46,19 @@ pub fn new_ctx(ip: Option<u64>,
 
     if let Some(ref sym_vars) = syms {
         for var in sym_vars {
-            match to_key(var) {
+            let  _ = match to_key(var) {
                 Key::Mem(addr) => ctx.set_mem_as_sym(addr, 64),
                 Key::Reg(ref reg) => ctx.set_reg_as_sym(reg),
-            }
+            };
         }
     }
 
     if let Some(ref const_var) = consts {
         for (k, v) in const_var {
-            match to_key(k) {
+            let _ = match to_key(k) {
                 Key::Mem(addr) => ctx.set_mem_as_const(addr, *v, 64),
                 Key::Reg(ref reg) => ctx.set_reg_as_const(reg, *v),
-            }
+            };
         }
     }
 
