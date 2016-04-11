@@ -11,6 +11,27 @@ __Warning__: rune is under heavy development and the API is highly unstable.
 However, feel free to use rune as any comments, suggestions and feedbacks are
 highly valued at this stage of the project!
 
+__NOTE__: I am actively collecting suggestions for changes to the API. Please
+open issues for the same.
+
+## Asciinema
+[![asciicast](https://asciinema.org/a/1zvz0s5wpm2gx38hp5tw6za4m.png)](https://asciinema.org/a/1zvz0s5wpm2gx38hp5tw6za4m)
+
+## Installing
+Requires:
+* Standard rust toolchain. This should work with stable, but nightly is
+  recommended
+* Latest build of [radare2](https://github.com/radare/radare2)
+
+Clone this repository. Then run
+`cargo build`
+
+Cargo automatically fetches the required dependencies required for this
+project. To use runec, it is recommended to make a symlink to
+./target/debug/runec
+
+`ln -s ./target/debug/runec /usr/bin/runec`
+
 ## Examples
 TODO
 
@@ -24,9 +45,6 @@ all code will be dual-licensed under MIT and Apache Version 2.0,
 
 To make reviews easier please ensure that the code adhers to the standard
 rust style of coding.
-
-## Screencast / Shots
-TODO
 
 ## Project Milestones and Roadmap
 Please check the [Issues](https://github.com/sushant94/rune/issues)
