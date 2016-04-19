@@ -36,6 +36,9 @@ Options:
   --sym=<sym_vars>                       Registers/Memory address to be set as symbolic.
                                          Example: --sym=rsi,rdi,0x1000
   -b --break=<bp_list>                   Set breakpoints at addresses.
+  --reset                                Set all unset registers (symbolic / constant) to 0
+  --save                                 Save current configuration to a r2 project
+  -p --project=<project>                 Load a previously saved r2 project
   -h --help                              Show this screen.
 ";
 
@@ -47,7 +50,10 @@ struct Args {
     flag_const: Option<String>,
     flag_start: Option<u64>,
     flag_end: Option<u64>,
-    arg_file: String,
+    flag_reset: bool,
+    flag_save: bool,
+    flag_project: Option<String>,
+    arg_file: Option<String>,
 }
 
 fn main() {
@@ -57,6 +63,9 @@ fn main() {
         println!("{}", USAGE);
         exit(0);
     }
+
+    let mut stream = R2::new(args.arg_file).expect("Unable to spawn r2");
+    stream.init();
 
     let sym_vars = args.flag_sym
                        .unwrap_or_default()
@@ -85,27 +94,36 @@ fn main() {
                          .collect::<HashMap<_, _>>();
 
     let mut breakpoints = args.flag_break
-                          .unwrap_or_default()
-                          .split(',')
-                          .map(|x| {
-                              let b = x.to_owned();
-                              if b.starts_with("0x") {
-                                  u64::from_str_radix(&b[2..], 16).expect("Invalid base16 integer")
-                              } else {
-                                  u64::from_str_radix(&b, 10).expect("Invalid base10 integer")
-                              }
-                          })
-                          .collect::<Vec<_>>();
+                              .unwrap_or_default()
+                              .split(',')
+                              .map(|x| {
+                                  let b = x.to_owned();
+                                  if b.starts_with("0x") {
+                                      u64::from_str_radix(&b[2..], 16)
+                                          .expect("Invalid base16 integer")
+                                  } else {
+                                      u64::from_str_radix(&b, 10).expect("Invalid base10 integer")
+                                  }
+                              })
+                              .collect::<Vec<_>>();
 
     if let Some(addr) = args.flag_end {
         breakpoints.push(addr);
     }
 
+    // Load 'rune' flags from r2
+
+
+    // Load breakpoints and start address from r2
+    // 1. Load start addresses
+    // let start_address = if args.flag_start.is_none() {
+    // } else {
+    // args.flag_start.unwrap()
+    // };
+
     let ctx = utils::new_ctx(args.flag_start, Some(sym_vars), Some(const_vars));
     let mut explorer = InteractiveExplorer::new();
     explorer.bp = breakpoints;
-    let mut stream = R2::new(Some(args.arg_file)).expect("Unable to spawn r2");
-    stream.init();
 
     let mut rune = Rune::new(ctx, explorer, stream);
     rune.run().expect("Rune Error:");

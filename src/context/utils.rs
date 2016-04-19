@@ -1,4 +1,4 @@
-//! Utilities and other miscellaneous functions for RuneContext.
+//! Utilities and other miscellaneous functions for `RuneContext`
 
 use context::rune_ctx::{RuneContext, RuneMemory, RuneRegFile};
 use context::context::{ContextAPI};
@@ -8,12 +8,15 @@ use libsmt::logics::qf_abv;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
-enum Key {
+pub enum Key {
     Mem(usize),
     Reg(String),
 }
 
-fn to_key<T: AsRef<str>>(s: T) -> Key {
+/// Hex/Decimal to Memory address, any other string maps to Registers
+///
+/// Useful when input strings is to be interpretted either as a Memory Address or a register name.
+pub fn to_key<T: AsRef<str>>(s: T) -> Key {
     let v = s.as_ref();
     if v.len() > 2 && &v[0..2] == "0x" {
         Key::Mem(usize::from_str_radix(&v[2..], 16).expect("Invalid number!"))

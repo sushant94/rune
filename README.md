@@ -7,6 +7,12 @@ rune is extensible and customizable. Almost every component in rune
 can have multiple implementations (each with their own tradeoffs) and still be
 compatible with the existing system.
 
+At the moment, rune is not designed to be run on an entire binary, rather it
+is used to reason about smaller pieces of code iteratively and assist in
+reverse engineering tasks. If you need something that can be run on an entire
+binary automatically, you are better off other symbolic execution engines,
+such as [angr](https://github.com/angr/angr).
+
 __Warning__: rune is under heavy development and the API is highly unstable.
 However, feel free to use rune as any comments, suggestions and feedbacks are
 highly valued at this stage of the project!
