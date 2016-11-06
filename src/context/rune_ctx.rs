@@ -77,7 +77,7 @@ impl RuneRegFile {
         reginfo.reg_info.sort_by(|x, y| (y.offset + y.size).cmp(&(x.offset + x.size)));
         for register in &reginfo.reg_info {
             let (idx, s_bit, e_bit, is_whole) = if !seen_offsets.contains(&register.offset) &&
-                                                   register.type_str == "gpr" {
+                                                   (register.type_str == "gpr" || register.type_str == "flg") {
                 cur_regs.push(None);
                 seen_offsets.push(register.offset);
                 (cur_regs.len() - 1, 0, register.size - 1, true)
