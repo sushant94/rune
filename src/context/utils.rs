@@ -37,7 +37,7 @@ pub fn new_ctx(ip: Option<u64>,
         r2.send("e asm.bits = 64");
         r2.send("e asm.arch = x86");
         r2.flush();
-        let mut lreginfo = r2.get_reg_info().expect("Unable to retrieve register information!");
+        let mut lreginfo = r2.reg_info().expect("Unable to retrieve register information!");
         r2.close();
         RuneRegFile::new(&mut lreginfo)
     };

@@ -72,7 +72,7 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
                     self.ctx.reg_read(name)
                 }
             }
-            Token::EEntry(ref id) => self.intermediates[*id].clone(),
+            Token::EEntry(ref id, Some(64)) => self.intermediates[*id].clone(),
             Token::EConstant(value) => self.ctx.define_const(value, 64),
             Token::EAddress => {
                 let ip = self.ctx.ip();
@@ -190,7 +190,7 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
     // Write out to intermediates and return a token to it.
     fn process_out(&mut self, res: &<Ctx as RegisterRead>::VarRef) -> Token {
         self.intermediates.push(res.clone());
-        Token::EEntry(self.intermediates.len() - 1)
+        Token::EEntry(self.intermediates.len() - 1, Some(64))
     }
 }
 
@@ -200,7 +200,7 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
       S: InstructionStream<Output = LOpInfo, Index = u64>
 {
     fn run(&mut self) -> EngineResult<()> {
-        let mut p = Parser::init(None);
+        let mut p = Parser::init(None, Some(64));
         let mut control = RuneControl::Continue;
 
         loop {

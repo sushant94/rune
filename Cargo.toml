@@ -18,7 +18,7 @@ clippy = {version = "0.0.61", optional = true}
 docopt = "0.6"
 
 [dependencies.libsmt]
-path = "../libsmt-rs/"
+path = "../libsmt.rs/"
 
 [dependencies.radeco-lib]
 path = "../radeco-lib/"

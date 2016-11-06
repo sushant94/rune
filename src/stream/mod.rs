@@ -28,12 +28,12 @@ impl InstructionStream for R2 {
     type Index = u64;
 
     fn new() -> R2 {
-        R2::new(None).expect("Unable to open R2")
+        R2::new::<&str>(None).expect("Unable to open R2")
     }
 
     fn at(&mut self, addr: u64) -> Option<Self::Output> {
         let addr_ = format!("{}", addr);
-        Some(self.get_insts(Some(1), Some(&addr_)).unwrap()[0].clone())
+        Some(self.insts(Some(1), Some(&addr_)).unwrap()[0].clone())
     }
 }
 
