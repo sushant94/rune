@@ -41,7 +41,7 @@ pub struct Rune<Ctx, Exp, S>
 }
 
 
-impl<S, Exp, Ctx = RuneContext> Rune<Ctx, Exp, S>
+impl<S, Exp, Ctx> Rune<Ctx, Exp, S>
 where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
       Exp: PathExplorer<C = RuneControl, Ctx = Ctx>,
       S: InstructionStream<Output = LOpInfo, Index = u64>
