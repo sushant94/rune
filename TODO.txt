@@ -1,0 +1,9 @@
+Import the new structs from structs.rs
+
+Add a dummy tree creation function in the explorer which basically modifies the internal storage in the context
+
+* Find a way to dynamically construct a ssa form for the path *
+
+Could we optimize/modify it instruction by instruction?
+
+Convert to SMT

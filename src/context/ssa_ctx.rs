@@ -1,6 +1,6 @@
-//! Defines the `SSA Context` which uses the SSAStorage which
-//! internally uses the SSA Form for representing the path, which will allow us to apply
-//! optimization passes on a `path`
+//! Defines the `SSA Context` which uses SSAStorage imported from RadecoLib, 
+//! internally uses the SSA Form for representing the path, 
+//! which will allow us to apply optimization passes on a `path`
 
 use std::collections::HashMap;
 
@@ -18,17 +18,7 @@ use radeco_lib::middle::ssa::ssastorage::SSAStorage;
 use radeco_lib::frontend::ssaconstructor::SSAConstruct;
 use esil::parser;
 
-#[derive(Clone, Debug)]
-pub struct SSAContext {
-    ip: u64,
-    pub solver: SMTLib2<qf_abv::QF_ABV>,
-    regfile: RuneRegFile,
-    mem: RuneMemory,
-    pub syms: HashMap<String, NodeIndex>,
-    ssa_form: SSAStorage,
-    e_old: Option<NodeIndex>,
-    e_cur: Option<NodeIndex>,
-}
+use context::utils::{Key, to_key};
 
 #[derive(Clone, Debug, Default)]
 pub struct RuneMemory {
@@ -39,6 +29,7 @@ pub struct RuneMemory {
 struct RegEntry {
     name: String,
     idx: usize,
+    // 0 indexed
     start_bit: usize,
     end_bit: usize,
     is_whole: bool,
@@ -52,7 +43,7 @@ impl RegEntry {
            ebit: usize,
            is_whole: bool,
            alias: Option<String>)
-        -> RegEntry {
+           -> RegEntry {
         RegEntry {
             name: name,
             idx: idx,
@@ -183,6 +174,19 @@ impl RuneMemory {
     }
 }
 
+
+#[derive(Clone, Debug)]
+pub struct SSAContext {
+    ip: u64,
+    pub solver: SMTLib2<qf_abv::QF_ABV>,
+    regfile: RuneRegFile,
+    mem: RuneMemory,
+    pub syms: HashMap<String, NodeIndex>,
+    ssa_form: SSAStorage,
+    e_old: Option<NodeIndex>,
+    e_cur: Option<NodeIndex>,
+}
+
 impl Context for SSAContext {
     fn set_e_old(&mut self, i: NodeIndex) {
         self.e_old = Some(i);
@@ -264,7 +268,7 @@ impl MemoryRead for SSAContext {
     }
 }
 
-impl  MemoryWrite for SSAContext {
+impl MemoryWrite for SSAContext {
     type VarRef = NodeIndex;
 
     fn mem_write(&mut self, addr: NodeIndex, data: NodeIndex, write_size: u64) {
@@ -361,6 +365,46 @@ impl SSAContext {
             ssa_form: SSAStorage::new(),
         }
     }
+}
+
+pub fn new_ssa_ctx(ip: Option<u64>,
+                   syms: Option<Vec<String>>,
+                   consts: Option<HashMap<String, u64>>)
+    -> SSAContext {
+    let rregfile = {
+        use r2pipe::r2::R2;
+        let mut r2 = R2::new(Some("malloc://64".to_owned())).expect("Unable to spawn r2!");
+        r2.send("e asm.bits = 64");
+        r2.send("e asm.arch = x86");
+        r2.flush();
+        let mut lreginfo = r2.reg_info().expect("Unable to retrieve register information");
+        r2.close();
+        RuneRegFile::new(&mut lreginfo)
+    };
+
+    let mut rmem = RuneMemory::new();
+    let mut smt = SMTLib2::new(Some(qf_abv::QF_ABV));
+    rmem.init_memory(&mut smt);
+    let mut ctx = SSAContext::new(ip, rmem, rregfile, smt);
+
+    if let Some(ref sym_vars) = syms {
+        for var in sym_vars {
+            let _ = match to_key(var) {
+                Key::Mem(addr) => ctx.set_mem_as_sym(addr, 64),
+                Key::Reg(ref reg) => ctx.set_reg_as_sym(reg),
+            };
+        }
+    }
+
+    if let Some(ref const_var) = consts {
+        for (k, v) in const_var {
+            let _ = match to_key(k) {
+                Key::Mem(addr) => ctx.set_mem_as_const(addr, *v, 64),
+                Key::Reg(ref reg) => ctx.set_reg_as_const(reg, *v),
+            };
+        }
+    }
+    ctx
 }
 
 #[cfg(test)]

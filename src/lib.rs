@@ -19,6 +19,7 @@ pub mod context {
     pub mod context;
     pub mod rune_ctx;
     pub mod ssa_ctx;
+    pub mod structs;
     pub mod utils;
 }
 

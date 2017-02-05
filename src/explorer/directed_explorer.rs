@@ -10,6 +10,7 @@ use libsmt::theories::{bitvec, core};
 use libsmt::logics::qf_abv::QF_ABV_Fn;
 use libsmt::backends::z3;
 
+use std::collections::HashMap;
 
 // I know it is code repitition, but whatevs
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -47,20 +48,16 @@ impl PathExplorer for DirectedExplorer {
     type C = RuneControl;
     type Ctx = SSAContext;
 
-    fn new(decision_list: Vec<(u64, char)>) -> DirectedExplorer {
-        let mut d_map: HashMap<u64, BranchType> = HashMap::new();
-        
-        for tup in decision_list {
-            d_map.entry(tup.0).or_insert_with(BranchType::from(tup.1));
-        }
+   fn new() -> Self {
+       DirectedExplorer {
+           d_map: HashMap::new()
+       }
+   }
 
-        DirectedExplorer {
-            decision: d_map,
-        }
-    }
-
+   
     fn next(&mut self, ctx: &mut Self::Ctx) -> RuneControl {
         // Automated continuous exploration my bois
+        // TODO: Add tree construction logic?
         RuneControl::Continue
     }
 
@@ -69,11 +66,11 @@ impl PathExplorer for DirectedExplorer {
     }
 
     fn register_branch(&mut self,
-                       ctx: Self::Ctx,
+                       ctx: &mut Self::Ctx,
                        condition: <Self::Ctx as RegisterRead>::VarRef)
         -> RuneControl {
-            if self.d_map.contains_key(ctx.ip()) {
-                let direction = self.d_map.get(ctx.ip()).unwrap();
+            if self.d_map.contains_key(&ctx.ip()) {
+                let direction = self.d_map.get(&ctx.ip()).unwrap();
                 match *direction {
                     BranchType::True => {
                         let one = ctx.define_const(1, 64);
@@ -90,6 +87,18 @@ impl PathExplorer for DirectedExplorer {
             } else {
                 panic!("Do not know which branch to take. Set a default!");
             }
+    }
+}
+
+impl DirectedExplorer {
+    pub fn set_decisions(&mut self, decision_list: Vec<(u64, char)>) {
+        let mut d_map: HashMap<u64, BranchType> = HashMap::new();
+        
+        for tup in decision_list {
+            d_map.entry(tup.0).or_insert(BranchType::from(tup.1));
+        }
+
+        self.d_map = d_map;
     }
 }
 

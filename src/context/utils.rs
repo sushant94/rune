@@ -1,6 +1,7 @@
 //! Utilities and other miscellaneous functions for `RuneContext`
 
-use context::rune_ctx::{RuneContext, RuneMemory, RuneRegFile};
+use context::rune_ctx::RuneContext;
+use context::structs::{RuneMemory, RuneRegFile};
 use context::context::{ContextAPI};
 use libsmt::backends::smtlib2::SMTLib2;
 use libsmt::logics::qf_abv;
