@@ -12,11 +12,13 @@ extern crate esil;
 extern crate r2pipe;
 extern crate rustc_serialize;
 extern crate regex;
+extern crate radeco_lib;
 #[macro_use] extern crate libsmt;
 
 pub mod context {
     pub mod context;
     pub mod rune_ctx;
+    pub mod ssa_ctx;
     pub mod utils;
 }
 
@@ -24,6 +26,7 @@ pub mod explorer {
     pub mod explorer;
     pub mod dfs;
     pub mod bfs;
+    pub mod directed_explorer;
 }
 
 pub mod engine {
