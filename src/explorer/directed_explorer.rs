@@ -58,6 +58,12 @@ impl PathExplorer for DirectedExplorer {
     fn next(&mut self, ctx: &mut Self::Ctx) -> RuneControl {
         // Automated continuous exploration my bois
         // TODO: Add tree construction logic?
+        // What should the logic contain?
+        // self.ssa_form is SSAStorage which should be modified?
+        // This has to be modified based on the current context which is ctx
+        // The tree here is a path which should be in the form available for 
+        // IR optimization.
+        
         RuneControl::Continue
     }
 
