@@ -63,7 +63,7 @@ impl PathExplorer for DirectedExplorer {
         // This has to be modified based on the current context which is ctx
         // The tree here is a path which should be in the form available for 
         // IR optimization.
-        
+        println!("{:#x}", ctx.ip());
         RuneControl::Continue
     }
 
@@ -75,6 +75,7 @@ impl PathExplorer for DirectedExplorer {
                        ctx: &mut Self::Ctx,
                        condition: <Self::Ctx as RegisterRead>::VarRef)
         -> RuneControl {
+            // println!("{:#x}", ctx.ip());
             if self.d_map.contains_key(&ctx.ip()) {
                 let direction = self.d_map.get(&ctx.ip()).unwrap();
                 match *direction {
@@ -110,6 +111,12 @@ impl DirectedExplorer {
 
 #[cfg(test)]
 mod test {
+    use engine::rune::Rune; 
+    use engine::engine::Engine;
+    use context::ssa_ctx;
+    use std::collections::HashMap;
+    use r2pipe::r2::R2;
+    
     use super::*;
 
     #[test]
@@ -117,7 +124,36 @@ mod test {
         let mut temp: Vec<(u64, BranchType)> = Vec::new();
         temp.push((0x1234, BranchType::from('T')));
 
-        let a = DirectedExplorer::new(temp);
+        // let a = DirectedExplorer::new(temp);
         // TODO: add assertion
+    }
+
+    #[test]
+    fn directed_explorer_test() {
+        let mut stream = R2::new(Some("./test_files/test")).expect("Unable to spawn r2");
+        stream.init();
+
+        let mut var_map: HashMap<String, u64> = HashMap::new();
+        var_map.insert("rbp".to_owned(), 256);
+        var_map.insert("rsp".to_owned(), 512);
+        var_map.insert("of".to_owned(), 0);
+        var_map.insert("cf".to_owned(), 0);
+        var_map.insert("zf".to_owned(), 0);
+        var_map.insert("pf".to_owned(), 0);
+        var_map.insert("sf".to_owned(), 0);
+        var_map.insert("rax".to_owned(), 0);
+        var_map.insert("rdx".to_owned(), 0);
+        var_map.insert("rsi".to_owned(), 0);
+        
+        let ctx = ssa_ctx::new_ssa_ctx(Some(0x0040050a), Some(Vec::new()), Some(var_map.clone()));
+        let mut explorer = DirectedExplorer::new();
+        
+        let mut v: Vec<(u64, char)> = Vec::new();
+        v.push((0x00400526, 'F'));
+
+        explorer.set_decisions(v);
+
+        let mut rune = Rune::new(ctx, explorer, stream);
+        rune.run().expect("Rune Error");
     }
 }
