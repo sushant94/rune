@@ -3,6 +3,7 @@
 //! which will allow us to apply optimization passes on a `path`
 
 use std::collections::HashMap;
+use std::fmt::Debug;
 
 use r2pipe::structs::LRegInfo;
 use petgraph::graph::NodeIndex;
@@ -127,13 +128,16 @@ impl Evaluate for SSAContext {
     type IFn = qf_abv::QF_ABV_Fn;
 
     fn eval<T, Q>(&mut self, smt_fn: T, operands: Q) -> Self::VarRef
-        where T: Into<Self::IFn>,
+        where T: Into<Self::IFn> + Clone,
               Q: AsRef<[Self::VarRef]>
     {
-        // TODO: Add extract / concat to ensure that the registers are of compatible
-        // sizes for
-        // operations.
+        // Match based on the smt_fn type?
+        // That would makes things a bit easier since we can then
+        // apply conditions?
+        let a = smt_fn.clone().into();
         self.solver.assert(smt_fn, &operands.as_ref())
+        // Tree construction logic goes in here. 
+        // We can access the operands and the current context here.
     }
 }
 
@@ -251,18 +255,4 @@ pub fn new_ssa_ctx(ip: Option<u64>,
         }
     }
     ctx
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use context::context::{Context, ContextAPI, Evaluate, MemoryRead, MemoryWrite, RegisterRead,
-                           RegisterWrite};
-    use context::utils;
-
-    use libsmt::logics::qf_abv;
-    use libsmt::backends::smtlib2::SMTLib2;
-    use libsmt::backends::backend::SMTBackend;
-    use libsmt::theories::{bitvec, core};
-    use libsmt::backends::z3;
 }
