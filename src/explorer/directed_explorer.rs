@@ -40,6 +40,7 @@ impl From<char> for BranchType {
 #[derive(Debug, Clone, Default)]
 pub struct DirectedExplorer {
     pub d_map: HashMap<u64, BranchType>,
+    pub break_addr: u64,
     // Ideally we should give control back to the user based on
     // his choice to stop/start execution somewhere.
 }
@@ -50,7 +51,8 @@ impl PathExplorer for DirectedExplorer {
 
    fn new() -> Self {
        DirectedExplorer {
-           d_map: HashMap::new()
+           d_map: HashMap::new(),
+           break_addr: 0x0
        }
    }
 
@@ -64,6 +66,15 @@ impl PathExplorer for DirectedExplorer {
         // The tree here is a path which should be in the form available for 
         // IR optimization.
         println!("{:#x}", ctx.ip());
+
+        if ctx.ip() == self.break_addr {
+            let mut z3: z3::Z3 = Default::default();
+            // println!("{:?}", ctx.solver);
+            ctx.solve(&mut z3);
+
+            println!("{:?}", ctx);
+        }
+
         RuneControl::Continue
     }
 
@@ -107,6 +118,10 @@ impl DirectedExplorer {
 
         self.d_map = d_map;
     }
+
+    pub fn set_break(&mut self, addr: u64) {
+        self.break_addr = addr;
+    }
 }
 
 #[cfg(test)]
@@ -116,6 +131,8 @@ mod test {
     use context::ssa_ctx;
     use std::collections::HashMap;
     use r2pipe::r2::R2;
+    use explorer::explorer::PathExplorer;
+    use context::context::ContextAPI;
     
     use super::*;
 
@@ -152,6 +169,61 @@ mod test {
         v.push((0x00400526, 'F'));
 
         explorer.set_decisions(v);
+
+        let mut rune = Rune::new(ctx, explorer, stream);
+        rune.run().expect("Rune Error");
+    }
+
+    #[test]
+    fn crackme_test() {
+        let mut stream = R2::new(Some("./test_files/crackme-nopie-macho")).expect("Unable to spawn r2");
+        stream.init();
+
+        let mut var_map: HashMap<String, u64> = HashMap::new();
+        var_map.insert("rbp".to_owned(), 0x9000);
+        var_map.insert("rsp".to_owned(), 512);
+        var_map.insert("of".to_owned(), 0);
+        var_map.insert("cf".to_owned(), 0);
+        var_map.insert("zf".to_owned(), 0);
+        var_map.insert("pf".to_owned(), 0);
+        var_map.insert("sf".to_owned(), 0);
+        var_map.insert("rax".to_owned(), 0);
+        var_map.insert("rdx".to_owned(), 0);
+        var_map.insert("rsi".to_owned(), 0);
+        var_map.insert("rdi".to_owned(), 0);
+        var_map.insert("rcx".to_owned(), 0);
+
+        
+        let mut ctx = ssa_ctx::new_ssa_ctx(Some(0x100000e02), Some(Vec::new()), Some(var_map.clone()));
+        let mut explorer = DirectedExplorer::new();
+        
+        let mut v: Vec<(u64, char)> = Vec::new();
+        // pie
+        // v.push((0x0040057b, 'T'));
+        // v.push((0x004005c3, 'F'));
+        // v.push((0x004005e8, 'F'));
+        // v.push((0x004005fb, 'T'));
+        // v.push((0x00400625, 'F'));
+        // v.push((0x0040062f, 'F'));
+        // nopie
+        v.push((0x100000e20, 'T'));
+        v.push((0x100000e6b, 'F'));
+        v.push((0x100000e8e, 'F'));
+        v.push((0x100000eab, 'T'));
+        v.push((0x100000ed3, 'T'));
+        // v.push((0x100000ee6, 'F'));
+
+        explorer.set_decisions(v);
+
+        let break_addr = 0x100000ee0;
+        explorer.set_break(break_addr);
+
+        let mut vec: Vec<u64> = Vec::new();
+        vec.push(0x8fe0);
+
+        for addr in vec {
+            ctx.set_mem_as_sym(addr as usize, 64);
+        }
 
         let mut rune = Rune::new(ctx, explorer, stream);
         rune.run().expect("Rune Error");
