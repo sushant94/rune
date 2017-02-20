@@ -60,8 +60,8 @@ pub trait Evaluate {
     type IFn: Clone + Debug;
 
     fn eval<T, Q>(&mut self, T, Q) -> Self::VarRef
-        where T: Into<Self::IFn>,
-              Q: AsRef<[Self::VarRef]>;
+        where T: Into<Self::IFn> + Clone,
+              Q: AsRef<[Self::VarRef]> + Debug;
 }
 
 /// Optional trait intended to boost usability of `Context`

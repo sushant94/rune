@@ -6,6 +6,7 @@ use std::collections::HashMap;
 
 use r2pipe::structs::LRegInfo;
 use petgraph::graph::NodeIndex;
+use petgraph::dot::{Dot, Config};
 use libsmt::backends::smtlib2::{SMTLib2, SMTProc};
 use libsmt::backends::backend::SMTBackend;
 use libsmt::logics::qf_abv;
@@ -18,6 +19,8 @@ use engine::rune::RuneControl;
 use radeco_lib::middle::ssa::ssastorage::SSAStorage;
 use radeco_lib::frontend::ssaconstructor::SSAConstruct;
 use esil::parser;
+
+use std::fmt::Debug;
 
 use context::utils::{Key, to_key};
 
@@ -127,12 +130,14 @@ impl Evaluate for SSAContext {
     type IFn = qf_abv::QF_ABV_Fn;
 
     fn eval<T, Q>(&mut self, smt_fn: T, operands: Q) -> Self::VarRef
-        where T: Into<Self::IFn>,
-              Q: AsRef<[Self::VarRef]>
+        where T: Into<Self::IFn> + Clone,
+              Q: AsRef<[Self::VarRef]> + Debug
     {
         // TODO: Add extract / concat to ensure that the registers are of compatible
         // sizes for
         // operations.
+        let bitvec_op = smt_fn.clone().into();
+        // println!("{:?}", bitvec_op);
         self.solver.assert(smt_fn, &operands.as_ref())
     }
 }

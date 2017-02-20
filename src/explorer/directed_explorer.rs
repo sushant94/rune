@@ -4,6 +4,7 @@
 use explorer::explorer::PathExplorer;
 use context::ssa_ctx::SSAContext;
 use engine::rune::RuneControl;
+use petgraph::dot::{Dot, Config};
 use context::context::{Context, Evaluate, MemoryRead, RegisterRead};
 
 use libsmt::theories::{bitvec, core};
@@ -65,14 +66,20 @@ impl PathExplorer for DirectedExplorer {
         // This has to be modified based on the current context which is ctx
         // The tree here is a path which should be in the form available for 
         // IR optimization.
-        println!("{:#x}", ctx.ip());
+        // println!("{:#x}\n*************", ctx.ip());
 
         if ctx.ip() == self.break_addr {
             let mut z3: z3::Z3 = Default::default();
             // println!("{:?}", ctx.solver);
-            ctx.solve(&mut z3);
+            // println!("{:?}", Dot::with_config(&ctx.solver.gr, &[Config::EdgeNoLabel]));
+            let res = ctx.solve(&mut z3);
+            // println!("{:?}", ctx.solver());
+            // println!("YAYAYA");
+            for (key, val) in &res {
+                println!("{}", val);
+            }
 
-            println!("{:?}", ctx);
+            // println!("{:?}", ctx);
         }
 
         RuneControl::Continue
@@ -133,6 +140,7 @@ mod test {
     use r2pipe::r2::R2;
     use explorer::explorer::PathExplorer;
     use context::context::ContextAPI;
+    use context::context::Context;
     
     use super::*;
 
@@ -176,7 +184,7 @@ mod test {
 
     #[test]
     fn crackme_test() {
-        let mut stream = R2::new(Some("./test_files/crackme-nopie-macho")).expect("Unable to spawn r2");
+        let mut stream = R2::new(Some("./test_files/crackme2")).expect("Unable to spawn r2");
         stream.init();
 
         let mut var_map: HashMap<String, u64> = HashMap::new();
@@ -194,7 +202,7 @@ mod test {
         var_map.insert("rcx".to_owned(), 0);
 
         
-        let mut ctx = ssa_ctx::new_ssa_ctx(Some(0x100000e02), Some(Vec::new()), Some(var_map.clone()));
+        let mut ctx = ssa_ctx::new_ssa_ctx(Some(0x100000e71), Some(Vec::new()), Some(var_map.clone()));
         let mut explorer = DirectedExplorer::new();
         
         let mut v: Vec<(u64, char)> = Vec::new();
@@ -206,20 +214,23 @@ mod test {
         // v.push((0x00400625, 'F'));
         // v.push((0x0040062f, 'F'));
         // nopie
-        v.push((0x100000e20, 'T'));
-        v.push((0x100000e6b, 'F'));
-        v.push((0x100000e8e, 'F'));
-        v.push((0x100000eab, 'T'));
-        v.push((0x100000ed3, 'T'));
-        // v.push((0x100000ee6, 'F'));
+        v.push((0x100000e85, 'F'));
+        v.push((0x100000ea0, 'F'));
+        v.push((0x100000ebb, 'T'));
+        v.push((0x100000ed9, 'F'));
 
         explorer.set_decisions(v);
 
-        let break_addr = 0x100000ee0;
+        let break_addr = 0x100000ea0;
         explorer.set_break(break_addr);
 
         let mut vec: Vec<u64> = Vec::new();
-        vec.push(0x8fe0);
+        vec.push(0x8fd8);
+        vec.push(0x8fd0);
+        // vec.push(0x8fc8);
+        vec.push(0x8fc0);
+
+        ctx.set_mem_as_const(0x8fec, 64, 64);
 
         for addr in vec {
             ctx.set_mem_as_sym(addr as usize, 64);

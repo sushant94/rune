@@ -14,6 +14,8 @@ use context::context::{Context, ContextAPI, Evaluate, MemoryRead, MemoryWrite, R
 
 use context::structs::{RuneRegFile, RuneMemory}; 
 
+use std::fmt::Debug;
+
 // TODO: Handle symbolic jumps
 
 #[derive(Clone, Debug)]
@@ -122,8 +124,8 @@ impl Evaluate for RuneContext {
     type IFn = qf_abv::QF_ABV_Fn;
 
     fn eval<T, Q>(&mut self, smt_fn: T, operands: Q) -> Self::VarRef
-        where T: Into<Self::IFn>,
-              Q: AsRef<[Self::VarRef]>
+        where T: Into<Self::IFn> + Clone,
+              Q: AsRef<[Self::VarRef]> + Debug
     {
         // TODO: Add extract / concat to ensure that the registers are of compatible
         // sizes for

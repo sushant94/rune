@@ -110,6 +110,7 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
         // println!("****");
 
         // println!("OPERANDS TO {:?}: {:?} {:?}", token, lhs, rhs);
+        // println!("{:x}\n*********\n", self.ctx.ip());
         let l_op = self.process_in(lhs.as_ref()).expect("LHS is ERR");
         let r_op = self.process_in(rhs.as_ref()).expect("RHS is ERR");
         // Since the operator arity us _atleast_ one. assert! that lhs is some.
