@@ -13,6 +13,8 @@ use esil::parser::{Parse, Parser};
 use libsmt::theories::{bitvec, core};
 use libsmt::logics::qf_abv;
 
+use std::process;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum RuneControl {
     Continue,
@@ -255,6 +257,7 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
 
             match self.explorer.next(&mut self.ctx) {
                 RuneControl::Continue => {}
+                RuneControl::Halt => process::exit(1),
                 _ => unimplemented!(),
             }
 
