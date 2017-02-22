@@ -18,6 +18,8 @@ use context::structs::{RuneRegFile, RuneMemory};
 use engine::rune::RuneControl;
 use radeco_lib::middle::ssa::ssastorage::SSAStorage;
 use radeco_lib::frontend::ssaconstructor::SSAConstruct;
+use radeco_lib::middle::ir::{MAddress, MOpcode};
+use radeco_lib::middle::ssa::ssa_traits::{ValueType};
 use esil::parser;
 
 use context::utils::{Key, to_key};
@@ -134,7 +136,16 @@ impl Evaluate for SSAContext {
         // Match based on the smt_fn type?
         // That would makes things a bit easier since we can then
         // apply conditions?
-        let a = smt_fn.clone().into();
+/*        let bitvec_op = smt_fn.clone().into();*/
+        //println!("{:?}", bitvec_op);
+
+        //let (op, vt) = match bitvec_op {
+            //qf_abv::QF_ABV_Fn::BVOps(bitvec::OpCodes::BvSub) => {
+                //(MOpcode::OpSub, ValueType::Integer { width: result_size })
+            //},
+            //_ => panic!("Dont know what to do."),
+        //};
+
         self.solver.assert(smt_fn, &operands.as_ref())
         // Tree construction logic goes in here. 
         // We can access the operands and the current context here.

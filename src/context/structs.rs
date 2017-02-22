@@ -141,11 +141,14 @@ impl RuneMemory {
         }
         let mem = self.map.unwrap();
         let idx = solver.assert(array_ex::OpCodes::Select, &[mem, addr]);
-        if read_size < 64 {
-            solver.assert(bitvec::OpCodes::Extract(read_size - 1, 1), &[idx])
-        } else {
-            idx
-        }
+        // Since this feature is unimplemented, patching it for temporary
+        // purposes. This HACK has to fixed later.
+        idx
+        // if read_size < 64 {
+        //     solver.assert(bitvec::OpCodes::Extract(read_size - 1, 1), &[idx])
+        // } else {
+        //     idx
+        // }
     }
 
     // TODO: Need to handle the case where write_size is not 64.
