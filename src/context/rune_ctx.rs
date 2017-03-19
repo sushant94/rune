@@ -123,7 +123,7 @@ impl Evaluate for RuneContext {
 
     fn eval<T, Q>(&mut self, smt_fn: T, operands: Q) -> Self::VarRef
         where T: Into<Self::IFn> + Clone,
-              Q: AsRef<[Self::VarRef]>
+              Q: AsRef<[Self::VarRef]> + Clone,
     {
         // TODO: Add extract / concat to ensure that the registers are of compatible
         // sizes for

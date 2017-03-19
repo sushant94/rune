@@ -61,7 +61,7 @@ impl PathExplorer for DirectedExplorer {
         // Automated continuous exploration my bois
         if ctx.ip() == self.break_addr {
             let mut z3: z3::Z3 = Default::default();
-            // println!("{:?}", ctx.solver.generate_asserts());
+            println!("{:?}", ctx.solver.generate_asserts());
             println!("Attempting to solve constraints:");
             let result = ctx.solve(&mut z3);
             println!("SAT. Solutions: ");

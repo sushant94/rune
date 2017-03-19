@@ -61,7 +61,7 @@ pub trait Evaluate {
 
     fn eval<T, Q>(&mut self, T, Q) -> Self::VarRef
         where T: Into<Self::IFn> + Clone,
-              Q: AsRef<[Self::VarRef]>;
+              Q: AsRef<[Self::VarRef]> + Clone;
 }
 
 /// Optional trait intended to boost usability of `Context`

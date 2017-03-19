@@ -21,8 +21,10 @@ use radeco_lib::frontend::ssaconstructor::SSAConstruct;
 use radeco_lib::middle::ir::{MAddress, MOpcode};
 use radeco_lib::middle::ssa::ssa_traits::{ValueType};
 use esil::parser;
+use esil::lexer::{Token};
 
 use context::utils::{Key, to_key};
+use explorer::directed_explorer::BranchType;
 
 #[derive(Clone, Debug)]
 pub struct SSAContext {
@@ -32,6 +34,7 @@ pub struct SSAContext {
     mem: RuneMemory,
     pub syms: HashMap<String, NodeIndex>,
     ssa_form: SSAStorage,
+    d_map: HashMap<u64, BranchType>,
     e_old: Option<NodeIndex>,
     e_cur: Option<NodeIndex>,
 }
@@ -131,24 +134,15 @@ impl Evaluate for SSAContext {
 
     fn eval<T, Q>(&mut self, smt_fn: T, operands: Q) -> Self::VarRef
         where T: Into<Self::IFn> + Clone,
-              Q: AsRef<[Self::VarRef]>
+              Q: AsRef<[Self::VarRef]> + Clone
     {
-        // Match based on the smt_fn type?
-        // That would makes things a bit easier since we can then
-        // apply conditions?
-/*        let bitvec_op = smt_fn.clone().into();*/
-        //println!("{:?}", bitvec_op);
-
-        //let (op, vt) = match bitvec_op {
-            //qf_abv::QF_ABV_Fn::BVOps(bitvec::OpCodes::BvSub) => {
-                //(MOpcode::OpSub, ValueType::Integer { width: result_size })
-            //},
-            //_ => panic!("Dont know what to do."),
-        //};
-
-        self.solver.assert(smt_fn, &operands.as_ref())
         // Tree construction logic goes in here. 
         // We can access the operands and the current context here.
+        self.add_to_path(smt_fn.clone(), operands.clone());
+
+        // Assertion wil be done after the path has been constructed which will allow us
+        // implement further optimizations.
+        self.solver.assert(smt_fn, &operands.as_ref())
     }
 }
 
@@ -224,8 +218,37 @@ impl SSAContext {
             e_cur: None,
             syms: HashMap::new(),
             ssa_form: SSAStorage::new(),
+            d_map: HashMap::new(),
         }
     }
+
+    pub fn set_decisions(&mut self, decision_list: Vec<(u64, char)>) {
+        let mut d_map: HashMap<u64, BranchType> = HashMap::new();
+
+        for tup in decision_list {
+            d_map.entry(tup.0).or_insert(BranchType::from(tup.1));
+        }
+
+        self.d_map = d_map;
+    }
+
+    pub fn add_to_path<T, Q>(&mut self, smt_fn: T, operands: Q)
+    where T: Into<qf_abv::QF_ABV_Fn> + Clone,
+          Q: AsRef<[NodeIndex]>
+    {
+        // Check init_blocks() and see if it is required in this context 
+        // before starting the construction of the path.
+        
+        // Emulate process_in() and process_op() from ssa_constructor.rs
+        // The difference being that there is no involvement of phiplacement.
+        // We will be using the decision map wherever necessary for path creation
+        // and completely ignore the other branch.
+        // One way to approach this would be to directly override the instruction to 
+        // `jmp` and not consider the condition under which it jumped.
+        // If no decision is maintained, follow the true branch.
+        // This behaviour should be changed and both branches should be queued for exploration.
+    }
+ 
 }
 
 pub fn new_ssa_ctx(ip: Option<u64>,
