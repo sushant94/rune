@@ -25,6 +25,9 @@ use std::collections::{BTreeMap, HashMap};
 use context::utils::{Key, to_key};
 use explorer::directed_explorer::BranchType;
 use radeco_lib::frontend::ssaconstructor::VarId;
+use radeco_lib::middle::ssa::cfg_traits::CFG;
+
+use radeco_lib::middle::ssa::ssa_traits::SSA;
 
 use r2pipe::r2::R2;
 use r2pipe::structs::LRegInfo;
@@ -70,6 +73,15 @@ impl PathConstructor {
             outputs: HashMap::new(),
         };
 
+        // The path would look something like this ->
+        // [ Start block (added here) ]
+        //          |
+        //          v
+        //  [ Main block representing the path we want to explore ]
+        //          |
+        //          v
+        //  [ end block ]
+
         // Assuming we dont need alias_info and we will be retrieving that information from the
         // RuneRegFile based alias_info. Doesn't really matter from where it comes from.
         {
@@ -80,22 +92,70 @@ impl PathConstructor {
                 identmap.insert(r_name, reg_width as u64);
             }
         } 
-
-        {
-            let r2 = regfile.regfile.clone();
-            let mut whole: Vec<ValueType> = Vec::new();
-            for (r_name, entry) in r2 {
-                let reg_width = entry.get_width();
-                whole.push(ValueType::Integer { width: reg_width as u16 });
-            }
-            
-            pc.add_variables(whole);
-        }
-
+        
         // Add "mem" type variable
         pc.add_variables(vec![ValueType::Integer { width: 0 }]);
 
+        // Emulating init_blocks
+        let start_address = MAddress::new(0, 0);
+        let start_block = pc.ssa.add_block(start_address);
+
+        pc.blocks.insert(start_address, start_block);
+        pc.ssa.mark_start_node(&start_block);
+
+        let r1 = pc.regfile.regfile.clone();
+
+         for (i, reg) in r1.iter().enumerate() {
+            let (reg_name, reg_entry) = reg; 
+            let vt = ValueType::Integer { width: reg_entry.get_width() as u16 };
+            let reg_comment = pc.add_comment(start_address, vt, reg_name.to_owned());
+            pc.write_variable(start_address, i, reg_comment);
+        }
+        
+        {
+            let reglen = pc.regfile.regfile.len();
+            pc.set_mem_id(reglen);
+            let mem_comment = pc.add_comment(start_address, ValueType::Integer { width: 0 }, "mem".to_owned());
+            pc.write_variable(start_address, reglen, mem_comment);
+        }
+
+        // Emulating sync_register_state
+        
+        
+        // Emulate add_dynamic to add exit node and mark it
+
         pc
+    }
+
+    pub fn sync_register_state(&mut self, block: NodeIndex) {
+        let rs = self.ssa.registers_at(&block);
+        for val in 0..self.variable_types.len() {
+            let mut addr = self.addr_of(block);
+            // let val = self.read_variable(&mut addr, var);
+            // self.ssa.op_use(rs, var as u8, val);
+        }
+    }
+
+    fn addr_of(&self, block: NodeIndex) -> MAddress {
+        self.ssa.address(&block).unwrap()
+    }
+
+    // TODO: READ_VARIABLE
+
+    pub fn write_variable(&mut self, address: MAddress, variable: VarId, value: NodeIndex) {
+        self.current_def[variable].insert(address, value);
+        self.outputs.insert(value, variable);
+    }
+
+    pub fn add_comment(&mut self, address: MAddress, vt: ValueType, msg: String) -> NodeIndex {
+        let node = self.ssa.add_comment(vt, msg);
+        self.index_to_addr.insert(node, address);
+        node
+    }
+
+    pub fn set_mem_id(&mut self, id: usize) {
+        assert_eq!(self.mem_id, 0);
+        self.mem_id = id;
     }
 
     pub fn add_to_path<A, B>(&mut self, smt_fn: A, operands: B)

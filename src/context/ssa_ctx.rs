@@ -272,52 +272,5 @@ impl SSAContext {
                 };
             }
         }
-
-        // The path would look something like this ->
-        // [ Start block (added in the initialize function!)]
-        //                    |
-        //                    v
-        //  [ Main block representing the path we want to explore ]
-        //                    |
-        //                    v
-        //              [ end block ]
-/*        let start_address = MAddress::new(0, 0);*/
-        //let start_block = ctx.ssa.add_block(start_address);
-
-        //ctx.ssa.mark_start_node(&start_block);
-
-        //for (i, reg) in ctx.regfile.regfile.iter().enumerate() {
-            //let vt = ValueType::Integer { width: reg.get_width() };
-            //let argnode = ctx.ssa.add_comment(vt, reg.name);
-            //ctx.current_def[i].insert(start_address, argnode);
-            //ctx.outputs.insert(argnode, i);
-        //}
-
-        //// Insert mem as a pseudo variable.
-        //let reglen = ctx.regfile.regfile.whole_names.len(); 
-        //ctx.set_mem_id(reglen);
-
-        //{
-            //let mem_comment = ctx.ssa.add_comment(start_address, ValueType::Integer { width: 0 }, "mem".to_owned());
-            //ctx.current_def[i].insert(start_address, mem_comment);
-            //ctx.outputs.insert(mem_comment, i);
-        //}
-    }
-
-    pub fn add_to_path<T, Q>(&mut self, smt_fn: T, operands: Q)
-    where T: Into<qf_abv::QF_ABV_Fn> + Clone,
-          Q: AsRef<[NodeIndex]>
-    {
-        // Check init_blocks() and see if it is required in this context 
-        // before starting the construction of the path.
-        
-        // Emulate process_in() and process_op() from ssa_constructor.rs
-        // The difference being that there is no involvement of phiplacement.
-        // We will be using the decision map wherever necessary for path creation
-        // and completely ignore the other branch.
-        // One way to approach this would be to directly override the instruction to 
-        // `jmp` and not consider the condition under which it jumped.
-        // If no decision is maintained, follow the true branch.
-        // This behaviour should be changed and both branches should be queued for exploration.
     }
 }
