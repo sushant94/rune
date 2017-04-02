@@ -28,7 +28,7 @@ fn main() {
     var_map.insert("rsi".to_owned(), 0);
     var_map.insert("rdi".to_owned(), 0);
 
-    let mut ctx = ssa_ctx::new_ssa_ctx(Some(0x0040060a), Some(Vec::new()), Some(var_map.clone()));
+    let mut ctx = ssa_ctx::new_ssa_ctx(&mut stream, Some(0x0040060a), Some(Vec::new()), Some(var_map.clone()));
     let mut explorer = DirectedExplorer::new();
     
     let mut v: Vec<(u64, char)> = Vec::new();

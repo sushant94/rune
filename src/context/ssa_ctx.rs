@@ -5,7 +5,6 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 
-use r2pipe::structs::LRegInfo;
 use petgraph::graph::NodeIndex;
 use libsmt::backends::smtlib2::{SMTLib2, SMTProc};
 use libsmt::backends::backend::SMTBackend;
@@ -20,26 +19,38 @@ use radeco_lib::middle::ssa::ssastorage::SSAStorage;
 use radeco_lib::frontend::ssaconstructor::SSAConstruct;
 use radeco_lib::middle::ir::{MAddress, MOpcode};
 use radeco_lib::middle::ssa::ssa_traits::{ValueType};
+use radeco_lib::middle::ssa::cfg_traits::CFGMod;
+use radeco_lib::middle::ssa::ssa_traits::{SSAExtra, SSAMod};
+use radeco_lib::middle::phiplacement::PhiPlacer;
 use esil::parser;
 use esil::lexer::{Token};
 
 use context::utils::{Key, to_key};
 use explorer::directed_explorer::BranchType;
 
+use constructor::path_constructor::PathConstructor;
+
+use r2pipe::r2::R2;
+use r2pipe::structs::LRegInfo;
+
 #[derive(Clone, Debug)]
-pub struct SSAContext {
+pub struct SSAContext
+{
     ip: u64,
     pub solver: SMTLib2<qf_abv::QF_ABV>,
     regfile: RuneRegFile,
     mem: RuneMemory,
     pub syms: HashMap<String, NodeIndex>,
-    ssa_form: SSAStorage,
     d_map: HashMap<u64, BranchType>,
     e_old: Option<NodeIndex>,
     e_cur: Option<NodeIndex>,
+    // A Constructor instance for importing the add_to_path() function which will allow us to
+    // construct the path on the fly in the eval loop!
+    constructor: PathConstructor,
 }
 
-impl Context for SSAContext {
+impl Context for SSAContext
+{
     fn set_e_old(&mut self, i: NodeIndex) {
         self.e_old = Some(i);
     }
@@ -138,7 +149,7 @@ impl Evaluate for SSAContext {
     {
         // Tree construction logic goes in here. 
         // We can access the operands and the current context here.
-        self.add_to_path(smt_fn.clone(), operands.clone());
+        self.constructor.add_to_path(smt_fn.clone(), operands.clone());
 
         // Assertion wil be done after the path has been constructed which will allow us
         // implement further optimizations.
@@ -212,12 +223,12 @@ impl SSAContext {
         SSAContext {
             ip: ip.unwrap_or(0),
             mem: mem,
-            regfile: regfile,
+            regfile: regfile.clone(),
             solver: solver,
             e_old: None,
             e_cur: None,
+            constructor: PathConstructor::new(SSAStorage::new(), regfile),
             syms: HashMap::new(),
-            ssa_form: SSAStorage::new(),
             d_map: HashMap::new(),
         }
     }
@@ -230,6 +241,67 @@ impl SSAContext {
         }
 
         self.d_map = d_map;
+    }
+
+    pub fn initialize(&mut self, stream: &mut R2, ip: Option<u64>, syms: Option<Vec<String>>, consts: Option<HashMap<String, u64>>) {
+        stream.set_config_var("asm", "bits", "64");
+        stream.set_config_var("asm", "bits", "x86");
+
+        let mut lreginfo = stream.reg_info().expect("Unable to retrieve register information");
+        let rregfile = RuneRegFile::new(&mut lreginfo);
+
+        let mut rmem = RuneMemory::new();
+        let mut smt = SMTLib2::new(Some(qf_abv::QF_ABV));
+        rmem.init_memory(&mut smt);
+        let mut ctx = SSAContext::new(ip, rmem, rregfile, smt);
+
+        if let Some(ref sym_vars) = syms {
+            for var in sym_vars {
+                let _ = match to_key(var) {
+                    Key::Mem(addr) => ctx.set_mem_as_sym(addr, 64),
+                    Key::Reg(ref reg) => ctx.set_reg_as_sym(reg),
+                };
+            }
+        }
+
+        if let Some(ref const_var) = consts {
+            for (k, v) in const_var {
+                let _ = match to_key(k) {
+                    Key::Mem(addr) => ctx.set_mem_as_const(addr, *v, 64),
+                    Key::Reg(ref reg) => ctx.set_reg_as_const(reg, *v),
+                };
+            }
+        }
+
+        // The path would look something like this ->
+        // [ Start block (added in the initialize function!)]
+        //                    |
+        //                    v
+        //  [ Main block representing the path we want to explore ]
+        //                    |
+        //                    v
+        //              [ end block ]
+/*        let start_address = MAddress::new(0, 0);*/
+        //let start_block = ctx.ssa.add_block(start_address);
+
+        //ctx.ssa.mark_start_node(&start_block);
+
+        //for (i, reg) in ctx.regfile.regfile.iter().enumerate() {
+            //let vt = ValueType::Integer { width: reg.get_width() };
+            //let argnode = ctx.ssa.add_comment(vt, reg.name);
+            //ctx.current_def[i].insert(start_address, argnode);
+            //ctx.outputs.insert(argnode, i);
+        //}
+
+        //// Insert mem as a pseudo variable.
+        //let reglen = ctx.regfile.regfile.whole_names.len(); 
+        //ctx.set_mem_id(reglen);
+
+        //{
+            //let mem_comment = ctx.ssa.add_comment(start_address, ValueType::Integer { width: 0 }, "mem".to_owned());
+            //ctx.current_def[i].insert(start_address, mem_comment);
+            //ctx.outputs.insert(mem_comment, i);
+        //}
     }
 
     pub fn add_to_path<T, Q>(&mut self, smt_fn: T, operands: Q)
@@ -248,45 +320,4 @@ impl SSAContext {
         // If no decision is maintained, follow the true branch.
         // This behaviour should be changed and both branches should be queued for exploration.
     }
- 
-}
-
-pub fn new_ssa_ctx(ip: Option<u64>,
-                   syms: Option<Vec<String>>,
-                   consts: Option<HashMap<String, u64>>)
-    -> SSAContext {
-    let rregfile = {
-        use r2pipe::r2::R2;
-        let mut r2 = R2::new(Some("malloc://64".to_owned())).expect("Unable to spawn r2!");
-        r2.send("e asm.bits = 64");
-        r2.send("e asm.arch = x86");
-        r2.flush();
-        let mut lreginfo = r2.reg_info().expect("Unable to retrieve register information");
-        r2.close();
-        RuneRegFile::new(&mut lreginfo)
-    };
-
-    let mut rmem = RuneMemory::new();
-    let mut smt = SMTLib2::new(Some(qf_abv::QF_ABV));
-    rmem.init_memory(&mut smt);
-    let mut ctx = SSAContext::new(ip, rmem, rregfile, smt);
-
-    if let Some(ref sym_vars) = syms {
-        for var in sym_vars {
-            let _ = match to_key(var) {
-                Key::Mem(addr) => ctx.set_mem_as_sym(addr, 64),
-                Key::Reg(ref reg) => ctx.set_reg_as_sym(reg),
-            };
-        }
-    }
-
-    if let Some(ref const_var) = consts {
-        for (k, v) in const_var {
-            let _ = match to_key(k) {
-                Key::Mem(addr) => ctx.set_mem_as_const(addr, *v, 64),
-                Key::Reg(ref reg) => ctx.set_reg_as_const(reg, *v),
-            };
-        }
-    }
-    ctx
 }

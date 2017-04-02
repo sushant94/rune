@@ -65,20 +65,21 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
         if t.is_none() {
             return Ok(None);
         }
+        let address = self.ctx.ip();
         let read = match *t.unwrap() {
             Token::ERegister(ref name) | Token::EIdentifier(ref name) => {
                 if self.ctx.alias_of(name.clone()) == Some("PC".to_owned()) {
-                    let ip = self.ctx.ip();
-                    self.ctx.define_const(ip, 64)
+                    self.ctx.define_const(address, 64)
                 } else {
                     self.ctx.reg_read(name)
                 }
             }
             Token::EEntry(ref id, Some(64)) => self.intermediates[*id].clone(),
-            Token::EConstant(value) => self.ctx.define_const(value, 64),
+            Token::EConstant(value) => {
+                self.ctx.define_const(value, 64)
+            }
             Token::EAddress => {
-                let ip = self.ctx.ip();
-                self.ctx.define_const(ip, 64)
+                self.ctx.define_const(address, 64)
             }
             Token::EOld => self.ctx.e_old(),
             Token::ECur => self.ctx.e_cur(),

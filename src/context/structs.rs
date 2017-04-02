@@ -42,6 +42,10 @@ impl RegEntry {
             alias: alias,
         }
     }
+
+    pub fn get_width(&self) -> usize {
+        self.end_bit - self.start_bit + 1
+    }
 }
 
 #[derive(Clone, Debug, Default)]

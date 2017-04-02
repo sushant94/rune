@@ -11,6 +11,11 @@ use libsmt::logics::qf_abv::QF_ABV_Fn;
 use libsmt::backends::z3;
 
 use std::collections::HashMap;
+use radeco_lib::middle::ssa::ssastorage::SSAStorage;
+
+use radeco_lib::middle::ssa::ssa_traits::{SSAExtra, SSAMod};
+use std::fmt::Debug;
+use std::marker::PhantomData;
 
 // I know it is code repitition, but whatevs
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -45,7 +50,8 @@ pub struct DirectedExplorer {
     // his choice to stop/start execution somewhere.
 }
 
-impl PathExplorer for DirectedExplorer {
+impl PathExplorer for DirectedExplorer
+{
     type C = RuneControl;
     type Ctx = SSAContext;
 
