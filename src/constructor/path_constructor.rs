@@ -1,29 +1,15 @@
 // Rather than the context having all of that information, let's move the construction logic out
-use std::fmt::Debug;
-
 use petgraph::graph::NodeIndex;
-use libsmt::backends::smtlib2::{SMTLib2, SMTProc};
-use libsmt::backends::backend::SMTBackend;
 use libsmt::logics::qf_abv;
-use libsmt::theories::{array_ex, bitvec, core};
 
-use context::context::{Context, ContextAPI, Evaluate, MemoryRead, MemoryWrite, RegisterRead,
-                       RegisterWrite};
-use context::structs::{RuneRegFile, RuneMemory};
-use engine::rune::RuneControl;
+use context::structs::{RuneRegFile};
 use radeco_lib::middle::ssa::ssastorage::SSAStorage;
-use radeco_lib::frontend::ssaconstructor::SSAConstruct;
 use radeco_lib::middle::ir::{MAddress, MOpcode};
 use radeco_lib::middle::ssa::ssa_traits::{ValueType};
 use radeco_lib::middle::ssa::cfg_traits::CFGMod;
-use radeco_lib::middle::ssa::ssa_traits::{SSAExtra, SSAMod};
-use radeco_lib::middle::phiplacement::PhiPlacer;
-use esil::parser;
-use esil::lexer::{Token};
+use radeco_lib::middle::ssa::ssa_traits::{SSAMod};
 use std::collections::{BTreeMap, HashMap};
 
-use context::utils::{Key, to_key};
-use explorer::directed_explorer::BranchType;
 use radeco_lib::frontend::ssaconstructor::VarId;
 use radeco_lib::middle::ssa::cfg_traits::CFG;
 use radeco_lib::middle::dot;
@@ -32,9 +18,6 @@ use std::io::prelude::*;
 use std::fs::File;
 
 use radeco_lib::middle::ssa::ssa_traits::SSA;
-
-use r2pipe::r2::R2;
-use r2pipe::structs::LRegInfo;
 
 #[derive(Clone, Debug)]
 pub struct PathConstructor
@@ -60,7 +43,7 @@ pub struct PathConstructor
 }
 
 impl PathConstructor {
-    pub fn new(ssa: SSAStorage, regfile: RuneRegFile) -> PathConstructor {
+    pub fn new(ssa: SSAStorage, regfile: RuneRegFile, ip: u64) -> PathConstructor {
         let mut pc = PathConstructor {
             ssa: ssa,
             variable_types: Vec::new(),
@@ -102,7 +85,7 @@ impl PathConstructor {
             let r2 = regfile.regfile.clone();
             let mut whole = Vec::new();
             let mut reg_width: usize;
-            for (r_name, r_entry) in r2 {
+            for (_, r_entry) in r2 {
                 reg_width = r_entry.get_width();
                 whole.push(ValueType::Integer { width: reg_width as u16 });
             }
@@ -148,6 +131,11 @@ impl PathConstructor {
         
         // Mark the exit node.
         // pc.ssa.mark_exit_node(&exit_block);
+        
+        // Let's add the main block we are going to work on.
+        pc.instruction_offset = 0;
+        let next_address = MAddress::new(ip, pc.instruction_offset);
+        pc.add_block(next_address, Some(start_address), None);
 
         // Test creation of the graph
         let tmp = dot::emit_dot(&pc.ssa);
@@ -155,6 +143,27 @@ impl PathConstructor {
         f.write_all(tmp.as_bytes()).expect("Write failed.");
         
         pc
+    }
+
+    pub fn new_block(&mut self, bb: MAddress) -> NodeIndex {
+        if let Some(b) = self.blocks.get(&bb) {
+            *b
+        } else {
+            let block = self.ssa.add_block(bb);
+            block
+        }
+    }
+    
+    pub fn add_block(&mut self, at: MAddress, current_address: Option<MAddress>, edge_type: Option<u8>) -> NodeIndex {
+        let main_block = self.new_block(at);
+        let start_block = self.block_of(current_address.unwrap()).unwrap();
+
+        const UNCOND_EDGE: u8 = 2;
+
+        self.ssa.add_control_edge(start_block, main_block, UNCOND_EDGE);
+        self.blocks.insert(at, main_block);
+
+        main_block
     }
     
     pub fn add_dynamic(&mut self) -> NodeIndex {
@@ -212,7 +221,6 @@ impl PathConstructor {
 
     pub fn read_variable_from_start(&mut self, variable: VarId, address: &mut MAddress) -> NodeIndex {
         let block = self.block_of(*address).unwrap();
-        let valtype = self.variable_types[variable];
         let preds = self.ssa.preds_of(block);
         let val = if preds.len() == 1 {
             let mut p_address = self.addr_of(preds[0]);
@@ -261,10 +269,12 @@ impl PathConstructor {
         self.mem_id = id;
     }
 
+    // Core function my bois
     pub fn add_to_path<A, B>(&mut self, smt_fn: A, operands: B)
         where A: Into<qf_abv::QF_ABV_Fn> + Clone,
               B: AsRef<[NodeIndex]>
     {
+
     }
 
     pub fn add_variables(&mut self, variable_types: Vec<ValueType>) {

@@ -4,18 +4,12 @@
 use explorer::explorer::PathExplorer;
 use context::ssa_ctx::SSAContext;
 use engine::rune::RuneControl;
-use context::context::{Context, Evaluate, MemoryRead, RegisterRead};
+use context::context::{Context, Evaluate, RegisterRead};
 
-use libsmt::theories::{bitvec, core};
-use libsmt::logics::qf_abv::QF_ABV_Fn;
+use libsmt::theories::{core};
 use libsmt::backends::z3;
 
 use std::collections::HashMap;
-use radeco_lib::middle::ssa::ssastorage::SSAStorage;
-
-use radeco_lib::middle::ssa::ssa_traits::{SSAExtra, SSAMod};
-use std::fmt::Debug;
-use std::marker::PhantomData;
 
 // I know it is code repitition, but whatevs
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -72,7 +66,7 @@ impl PathExplorer for DirectedExplorer
             let result = ctx.solve(&mut z3);
             println!("SAT. Solutions: ");
 
-            for (key, val) in result {
+            for (_, val) in result {
                 println!("{}", val);
             }
             return RuneControl::Halt

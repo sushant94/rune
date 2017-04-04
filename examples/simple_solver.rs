@@ -4,7 +4,6 @@ extern crate r2pipe;
 use rune::explorer::explorer::PathExplorer;
 use rune::explorer::directed_explorer::DirectedExplorer;
 use rune::context::ssa_ctx;
-use rune::engine::engine::Engine;
 use rune::engine::rune::Rune;
 use rune::context::context::ContextAPI;
 use r2pipe::r2::R2;

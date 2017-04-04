@@ -2,12 +2,11 @@
 
 use std::collections::HashMap;
 
-use r2pipe::structs::LRegInfo;
 use petgraph::graph::NodeIndex;
 use libsmt::backends::smtlib2::{SMTLib2, SMTProc};
 use libsmt::backends::backend::SMTBackend;
 use libsmt::logics::qf_abv;
-use libsmt::theories::{array_ex, bitvec, core};
+use libsmt::theories::{bitvec};
 
 use context::context::{Context, ContextAPI, Evaluate, MemoryRead, MemoryWrite, RegisterRead,
                        RegisterWrite};

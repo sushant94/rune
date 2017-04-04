@@ -2,7 +2,6 @@
 use std::collections::VecDeque;
 
 use explorer::explorer::{PathExplorer};
-use stream::{InstructionStream};
 use engine::rune::RuneControl;
 use context::context::{Context, RegisterRead};
 

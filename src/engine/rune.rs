@@ -2,8 +2,7 @@
 
 use r2pipe::structs::LOpInfo;
 
-use context::context::{Context, Evaluate, MemoryRead, MemoryWrite, RegisterRead, RegisterWrite};
-use context::rune_ctx::RuneContext;
+use context::context::{Context, RegisterRead};
 use explorer::explorer::PathExplorer;
 use stream::InstructionStream;
 use engine::engine::{Engine, EngineError, EngineResult};

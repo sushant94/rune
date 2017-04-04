@@ -3,27 +3,16 @@
 //! which will allow us to apply optimization passes on a `path`
 
 use std::collections::HashMap;
-use std::fmt::Debug;
-
 use petgraph::graph::NodeIndex;
 use libsmt::backends::smtlib2::{SMTLib2, SMTProc};
 use libsmt::backends::backend::SMTBackend;
 use libsmt::logics::qf_abv;
-use libsmt::theories::{array_ex, bitvec, core};
+use libsmt::theories::{bitvec};
 
 use context::context::{Context, ContextAPI, Evaluate, MemoryRead, MemoryWrite, RegisterRead,
                        RegisterWrite};
 use context::structs::{RuneRegFile, RuneMemory};
-use engine::rune::RuneControl;
 use radeco_lib::middle::ssa::ssastorage::SSAStorage;
-use radeco_lib::frontend::ssaconstructor::SSAConstruct;
-use radeco_lib::middle::ir::{MAddress, MOpcode};
-use radeco_lib::middle::ssa::ssa_traits::{ValueType};
-use radeco_lib::middle::ssa::cfg_traits::CFGMod;
-use radeco_lib::middle::ssa::ssa_traits::{SSAExtra, SSAMod};
-use radeco_lib::middle::phiplacement::PhiPlacer;
-use esil::parser;
-use esil::lexer::{Token};
 
 use context::utils::{Key, to_key};
 use explorer::directed_explorer::BranchType;
@@ -31,7 +20,6 @@ use explorer::directed_explorer::BranchType;
 use constructor::path_constructor::PathConstructor;
 
 use r2pipe::r2::R2;
-use r2pipe::structs::LRegInfo;
 
 #[derive(Clone, Debug)]
 pub struct SSAContext
@@ -227,7 +215,7 @@ impl SSAContext {
             solver: solver,
             e_old: None,
             e_cur: None,
-            constructor: PathConstructor::new(SSAStorage::new(), regfile),
+            constructor: PathConstructor::new(SSAStorage::new(), regfile, ip.unwrap_or(0)),
             syms: HashMap::new(),
             d_map: HashMap::new(),
         }
@@ -246,7 +234,8 @@ impl SSAContext {
 }
 
 pub fn initialize(stream: &mut R2, ip: Option<u64>, syms: Option<Vec<String>>, consts: Option<HashMap<String, u64>>) -> SSAContext {
-    stream.set_config_var("asm", "bits", "x86");
+    stream.set_config_var("asm", "arch", "x86");
+    stream.set_config_var("asm", "bits", "64");
 
     let mut lreginfo = stream.reg_info().expect("Unable to retrieve register information");
     let rregfile = RuneRegFile::new(&mut lreginfo);
