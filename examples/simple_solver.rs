@@ -10,6 +10,7 @@ use rune::context::context::ContextAPI;
 use r2pipe::r2::R2;
 use std::collections::HashMap;
 
+// XXX: NEEDS UPDATING.
 fn main() {
     let mut stream = R2::new(Some("./test_files/newcrackme")).expect("Unable to spawn r2");
     stream.init();
@@ -28,7 +29,7 @@ fn main() {
     var_map.insert("rsi".to_owned(), 0);
     var_map.insert("rdi".to_owned(), 0);
 
-    let mut ctx = ssa_ctx::new_ssa_ctx(&mut stream, Some(0x0040060a), Some(Vec::new()), Some(var_map.clone()));
+    let mut ctx = ssa_ctx::initialize(&mut stream, Some(0x0040060a), Some(Vec::new()), Some(var_map.clone()));
     let mut explorer = DirectedExplorer::new();
     
     let mut v: Vec<(u64, char)> = Vec::new();
@@ -52,5 +53,5 @@ fn main() {
     }
 
     let mut rune = Rune::new(ctx, explorer, stream);
-    rune.run().expect("not yet implemented");
+    // rune.run().expect("not yet implemented");
 }

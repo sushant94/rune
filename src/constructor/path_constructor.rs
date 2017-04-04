@@ -26,6 +26,10 @@ use context::utils::{Key, to_key};
 use explorer::directed_explorer::BranchType;
 use radeco_lib::frontend::ssaconstructor::VarId;
 use radeco_lib::middle::ssa::cfg_traits::CFG;
+use radeco_lib::middle::dot;
+
+use std::io::prelude::*;
+use std::fs::File;
 
 use radeco_lib::middle::ssa::ssa_traits::SSA;
 
@@ -92,6 +96,18 @@ impl PathConstructor {
                 identmap.insert(r_name, reg_width as u64);
             }
         } 
+
+        // Add variable to the HashMap
+        {
+            let r2 = regfile.regfile.clone();
+            let mut whole = Vec::new();
+            let mut reg_width: usize;
+            for (r_name, r_entry) in r2 {
+                reg_width = r_entry.get_width();
+                whole.push(ValueType::Integer { width: reg_width as u16 });
+            }
+            pc.add_variables(whole);
+        }
         
         // Add "mem" type variable
         pc.add_variables(vec![ValueType::Integer { width: 0 }]);
@@ -120,19 +136,66 @@ impl PathConstructor {
         }
 
         // Emulating sync_register_state
-        
-        
-        // Emulate add_dynamic to add exit node and mark it
+        pc.sync_register_state(start_block);
 
+        // The exit block needs a predecessor block,
+        // else we need to add a phi node to specify an incomplete CFG
+        // Let's defer the addition of the exit block for after the 
+        // creation of the CFG.
+        //
+        // Emulate add_dynamic to add exit node and mark it
+        // let exit_block = pc.add_dynamic();
+        
+        // Mark the exit node.
+        // pc.ssa.mark_exit_node(&exit_block);
+
+        // Test creation of the graph
+        let tmp = dot::emit_dot(&pc.ssa);
+        let mut f = File::create("yay.dot").unwrap();
+        f.write_all(tmp.as_bytes()).expect("Write failed.");
+        
         pc
+    }
+    
+    pub fn add_dynamic(&mut self) -> NodeIndex {
+        let action = self.ssa.add_dynamic();
+        let dyn_addr = MAddress::new(0xffffffff, 0);
+        self.blocks.insert(dyn_addr, action);
+        self.sync_register_state(action);
+        action
+    }
+
+    pub fn current_def_at(&self,
+                      variable: VarId,
+                      address: MAddress)
+                      -> Option<(&MAddress, &NodeIndex)> {
+        for (addr, idx) in self.current_def[variable].iter().rev() {
+            if self.block_of(*addr) != self.block_of(address) && *addr > address {
+                continue;
+            }
+            return Some((addr, idx));
+        }
+        None
+    }
+   
+    pub fn current_def_in_block(&self, variable: VarId, address: MAddress) -> Option<&NodeIndex> {
+        if let Some(v) = self.current_def_at(variable, address) {
+            if self.block_of(*v.0) == self.block_of(address) {
+                Some(v.1)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     }
 
     pub fn sync_register_state(&mut self, block: NodeIndex) {
         let rs = self.ssa.registers_at(&block);
-        for val in 0..self.variable_types.len() {
+        for var in 0..self.variable_types.len() {
             let mut addr = self.addr_of(block);
-            // let val = self.read_variable(&mut addr, var);
-            // self.ssa.op_use(rs, var as u8, val);
+            let val = self.read_variable(&mut addr, var);
+            self.ssa.op_use(rs, var as u8, val);
         }
     }
 
@@ -140,7 +203,47 @@ impl PathConstructor {
         self.ssa.address(&block).unwrap()
     }
 
-    // TODO: READ_VARIABLE
+    pub fn read_variable(&mut self, address: &mut MAddress, variable: VarId) -> NodeIndex {
+        match self.current_def_in_block(variable, *address).cloned() {
+            Some(var) => var,
+            None => self.read_variable_from_start(variable, address),
+        }
+    }
+
+    pub fn read_variable_from_start(&mut self, variable: VarId, address: &mut MAddress) -> NodeIndex {
+        let block = self.block_of(*address).unwrap();
+        let valtype = self.variable_types[variable];
+        let preds = self.ssa.preds_of(block);
+        let val = if preds.len() == 1 {
+            let mut p_address = self.addr_of(preds[0]);
+            self.read_variable(&mut p_address, variable)
+        } else {
+            panic!("Could not find variable definition in start block.");
+        };
+        self.write_variable(*address, variable, val);
+        val
+    }
+
+    pub fn block_of(&self, address: MAddress) -> Option<NodeIndex> {
+        let mut last = None;
+        let start_address = {
+            let start = self.ssa.start_node();
+            self.addr_of(start)
+        };
+        for (baddr, index) in self.blocks.iter().rev() {
+            // TODO: Better way to detect start block by using self.ssa.start_block
+            // If this is the start block.
+            if *baddr == start_address && *baddr != address {
+                last = None;
+            } else {
+                last = Some(*index);
+            }
+            if *baddr <= address {
+                break;
+            }
+        }
+        last
+    }
 
     pub fn write_variable(&mut self, address: MAddress, variable: VarId, value: NodeIndex) {
         self.current_def[variable].insert(address, value);
@@ -171,4 +274,3 @@ impl PathConstructor {
         self.variable_types.extend(variable_types);
     }
 }
-
