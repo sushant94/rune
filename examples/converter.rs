@@ -55,7 +55,6 @@ where I: Iterator<Item=S::ValueRef>,
             MOpcode::OpLsr => bitvec::OpCodes::BvLShr.into(),
             MOpcode::OpLoad => array_ex::OpCodes::Select.into(),
             MOpcode::OpStore => array_ex::OpCodes::Store.into(),
-            MOpcode::Cmp => core::OpCodes::Cmp.into(),
             _ => panic!("This opcode is either unimplemented or is not an opcode at all!"),
         }
     }
