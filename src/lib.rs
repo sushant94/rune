@@ -39,6 +39,7 @@ pub mod engine {
 
 pub mod constructor {
     pub mod path_constructor;
+    pub mod smt_constructor;
 }
 
 pub mod stream;

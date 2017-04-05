@@ -1,21 +1,14 @@
-extern crate rune;
-extern crate radeco_lib;
-extern crate libsmt;
-
-use std::fmt;
-use std::collections::HashMap;
 use std::marker::PhantomData;
 
-use radeco_lib::middle::ir::{MAddress, MOpcode};
-use radeco_lib::middle::ssa::ssa_traits::{NodeType, SSA, SSAMod, SSAWalk, ValueType};
-use radeco_lib::middle::ssa::ssastorage::{SSAStorage, NodeData};
+use radeco_lib::middle::ir::{MOpcode};
+use radeco_lib::middle::ssa::ssa_traits::{NodeType, SSA, SSAMod, SSAWalk};
+use radeco_lib::middle::ssa::ssastorage::{SSAStorage};
 
 use libsmt::logics::qf_abv;
 use libsmt::theories::{array_ex, bitvec, core};
 use libsmt::backends::z3;
-use libsmt::backends::smtlib2::{SMTLib2, SMTProc};
+use libsmt::backends::smtlib2::{SMTLib2};
 use libsmt::backends::backend::SMTBackend;
-
 
 pub struct Converter<'a, I, S>
     where I: Iterator<Item = S::ValueRef>,
@@ -60,26 +53,28 @@ where I: Iterator<Item=S::ValueRef>,
     }
 }
 
-fn main() {
-	let mut ssa = SSAStorage::new();
+pub fn convert(ssa: SSAStorage) {
 	let mut walker = ssa.inorder_walk();
 	let mut solver = SMTLib2::new(Some(qf_abv::QF_ABV));
 	let mut converter = Converter::new(&ssa);
 	let mut z3: z3::Z3 = Default::default();
 	for node_index in walker.nodes.iter() {
 		let mut operands = ssa.get_operands(node_index);
-		let mut node_data = match ssa.get_node_data(node_index) {
-			Ok(x) => x,
-			_ => panic!("WTF"),
-		};
-		let mut opcode = match node_data.nt {
-			NodeType::Op(op) => op,
-			NodeType::Comment(ref s) => MOpcode::OpInvalid,
-			_ => panic!("Uh oh."),
+		let mut opcode = match ssa.get_node_data(node_index) {
+			Ok(x) => 
+            {
+                let mut opcode = match x.nt {
+                    NodeType::Op(op) => op,
+                    NodeType::Comment(ref s) => MOpcode::OpInvalid,
+                    _ => panic!("GG"),
+                };
+                opcode
+            },
+			Err(x) => MOpcode::OpInvalid,
 		};
 		if opcode != MOpcode::OpInvalid {
 			solver.assert(converter.to_smt(opcode), &operands.as_ref());
 		}
 	}
-	solver.solve(&mut z3);
+	// let result = solver.solve(&mut z3);
 }

@@ -15,6 +15,8 @@ use radeco_lib::middle::dot;
 use std::io::prelude::*;
 use std::fs::File;
 
+use constructor::smt_constructor::convert;
+
 // I know it is code repitition, but whatevs
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum BranchType {
@@ -63,12 +65,13 @@ impl PathExplorer for DirectedExplorer
     fn next(&mut self, ctx: &mut Self::Ctx) -> RuneControl {
         // Automated continuous exploration my bois
         if ctx.ip() == self.break_addr {
-
-             // Test creation of the graph
+            // Test creation of the graph
             let tmp = dot::emit_dot(&ctx.constructor.ssa);
             let mut f = File::create("yay.dot").unwrap();
             f.write_all(tmp.as_bytes()).expect("Write failed.");
-            
+
+            convert(ctx.constructor.ssa.clone());
+
             let mut z3: z3::Z3 = Default::default();
             // println!("{:?}", ctx.solver.generate_asserts());
             println!("Attempting to solve constraints:");
