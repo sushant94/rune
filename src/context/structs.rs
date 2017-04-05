@@ -137,7 +137,7 @@ impl RuneMemory {
 
     pub fn read(&mut self,
                 addr: NodeIndex,
-                read_size: u64,
+                _: u64,
                 solver: &mut SMTLib2<qf_abv::QF_ABV>)
                 -> NodeIndex {
         if self.map.is_none() {

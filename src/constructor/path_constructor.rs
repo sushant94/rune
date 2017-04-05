@@ -13,13 +13,10 @@ use radeco_lib::middle::ssa::ssa_traits::{SSAMod};
 use radeco_lib::middle::ssa::ssa_traits::SSA;
 use radeco_lib::frontend::ssaconstructor::VarId;
 use radeco_lib::middle::ssa::cfg_traits::CFG;
-use radeco_lib::middle::dot;
 
 use libsmt::theories::{bitvec, core};
 use libsmt::logics::qf_abv::QF_ABV_Fn;
 
-use std::io::prelude::*;
-use std::fs::File;
 use std::collections::{BTreeMap, HashMap};
 
 use r2pipe::structs::LRegInfo;
@@ -27,7 +24,7 @@ use r2pipe::structs::LRegInfo;
 #[derive(Clone, Debug)]
 pub struct PathConstructor
 {
-    ssa: SSAStorage,
+    pub ssa: SSAStorage,
     pub variable_types: Vec<ValueType>,
     current_def: Vec<BTreeMap<MAddress, NodeIndex>>,
     regfile: SubRegisterFile,
@@ -94,7 +91,7 @@ impl PathConstructor {
         pc.add_variables(vec![ValueType::Integer { width: 0 }]);
 
         // Emulating init_blocks
-        let mut start_address = MAddress::new(0, 0);
+        let start_address = MAddress::new(0, 0);
         let start_block = pc.ssa.add_block(start_address);
 
         pc.blocks.insert(start_address, start_block);
@@ -138,11 +135,6 @@ impl PathConstructor {
         let next_address = MAddress::new(ip, pc.instruction_offset);
         pc.add_block(next_address, Some(start_address), None);
 
-        // Test creation of the graph
-        let tmp = dot::emit_dot(&pc.ssa);
-        let mut f = File::create("yay.dot").unwrap();
-        f.write_all(tmp.as_bytes()).expect("Write failed.");
-        
         pc
     }
 
@@ -313,7 +305,7 @@ impl PathConstructor {
         where A: Into<QF_ABV_Fn> + Clone,
               B: AsRef<[NodeIndex]>
     {
-        let mut current_address = MAddress::new(ip, 0);
+        let mut address = MAddress::new(ip, 0);
         let smt = smt_fn.into();
 
         // Next level hax
@@ -359,15 +351,38 @@ impl PathConstructor {
             QF_ABV_Fn::BVOps(bitvec::OpCodes::BvUGt) => {
                 (MOpcode::OpGt, ValueType::Integer { width: 1 })
             },
+            QF_ABV_Fn::CoreOps(core::OpCodes::Cmp) => {
+                (MOpcode::OpSub, ValueType::Integer { width: result_size })
+            },
+            QF_ABV_Fn::CoreOps(core::OpCodes::ITE) => {
+                (MOpcode::OpITE, ValueType::Integer { width: 1 })
+            },
             _ => { 
-                println!("{:?}", smt);
                 panic!("Unknown instruction")
             },
          };
 
-        // Assuming there is no RHS, let's see what goes in op_use
-        let op_node = self.add_op(&op, &mut current_address, vt);
-    //    self.op_use(&op_node, 0, lhs.as_ref().expect(""));
+        let oper_vec = operands.as_ref();
+        let oper_num = oper_vec.len();
+
+        // Casting is still left wtf
+        // println!("{:?}", op);
+
+        if oper_num == 1 {
+            let op_node = self.add_op(&op, &mut address, vt);
+            self.op_use(&op_node, 0, &oper_vec[0]);
+        } else if oper_num == 2 {
+            let op_node = self.add_op(&op, &mut address, vt);
+            self.op_use(&op_node, 0, &oper_vec[0]);
+            self.op_use(&op_node, 1, &oper_vec[1]);
+        } else {
+            let true_address = MAddress::new(address.address, address.offset+1);
+            let _ = self.add_comment(address, ValueType::Integer { width: 0 }, format!("T: {}", true_address));
+            let op_node = self.add_op(&op, &mut address, vt);
+            self.op_use(&op_node, 0, &oper_vec[0]);
+            self.op_use(&op_node, 1, &oper_vec[1]);
+            self.op_use(&op_node, 2, &oper_vec[2]);
+        }
     }
 
     pub fn op_use(&mut self, op: &NodeIndex, index: u8, arg: &NodeIndex) {

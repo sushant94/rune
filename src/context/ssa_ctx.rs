@@ -14,7 +14,7 @@ use context::context::{Context, ContextAPI, Evaluate, MemoryRead, MemoryWrite, R
 use context::structs::{RuneRegFile, RuneMemory};
 use radeco_lib::middle::ssa::ssastorage::SSAStorage;
 use radeco_lib::middle::ir::MAddress;
-use radeco_lib::middle::regfile::SubRegisterFile;
+use radeco_lib::middle::ssa::ssa_traits::SSAMod;
 
 use context::utils::{Key, to_key};
 use explorer::directed_explorer::BranchType;
@@ -37,7 +37,7 @@ pub struct SSAContext
     e_cur: Option<NodeIndex>,
     // A Constructor instance for importing the add_to_path() function which will allow us to
     // construct the path on the fly in the eval loop!
-    constructor: PathConstructor,
+    pub constructor: PathConstructor,
 }
 
 impl Context for SSAContext
@@ -77,6 +77,7 @@ impl Context for SSAContext
     }
 
     fn define_const(&mut self, c: u64, size: usize) -> NodeIndex {
+        self.constructor.ssa.add_const(c);
         self.solver.new_const(bitvec::OpCodes::Const(c, size))
     }
 
