@@ -13,6 +13,8 @@ use context::context::{Context, ContextAPI, Evaluate, MemoryRead, MemoryWrite, R
                        RegisterWrite};
 use context::structs::{RuneRegFile, RuneMemory};
 use radeco_lib::middle::ssa::ssastorage::SSAStorage;
+use radeco_lib::middle::ir::MAddress;
+use radeco_lib::middle::regfile::SubRegisterFile;
 
 use context::utils::{Key, to_key};
 use explorer::directed_explorer::BranchType;
@@ -20,6 +22,7 @@ use explorer::directed_explorer::BranchType;
 use constructor::path_constructor::PathConstructor;
 
 use r2pipe::r2::R2;
+use r2pipe::structs::LRegInfo;
 
 #[derive(Clone, Debug)]
 pub struct SSAContext
@@ -94,6 +97,8 @@ impl RegisterRead for SSAContext {
     type VarRef = NodeIndex;
 
     fn reg_read<T: AsRef<str>>(&mut self, reg: T) -> NodeIndex {
+        let mut current_address = MAddress::new(self.ip(), 0);
+        self.constructor.read_register(&mut current_address, reg.as_ref());
         self.regfile.read(reg.as_ref(), &mut self.solver)
     }
 }
@@ -135,12 +140,13 @@ impl Evaluate for SSAContext {
         where T: Into<Self::IFn> + Clone,
               Q: AsRef<[Self::VarRef]> + Clone
     {
-        // Tree construction logic goes in here. 
+        // Path construction logic goes in here. 
         // We can access the operands and the current context here.
-        self.constructor.add_to_path(smt_fn.clone(), operands.clone());
+        self.constructor.add_to_path(smt_fn.clone(), operands.clone(), self.ip.clone());
 
         // Assertion wil be done after the path has been constructed which will allow us
         // implement further optimizations.
+        // This is temporary.
         self.solver.assert(smt_fn, &operands.as_ref())
     }
 }
@@ -205,17 +211,18 @@ impl ContextAPI for SSAContext {
 impl SSAContext {
     pub fn new(ip: Option<u64>,
                mem: RuneMemory,
-               regfile: RuneRegFile,
-               solver: SMTLib2<qf_abv::QF_ABV>)
+               reginfo: &LRegInfo,
+               solver: SMTLib2<qf_abv::QF_ABV>,
+               regfile: RuneRegFile)
                -> SSAContext {
         SSAContext {
             ip: ip.unwrap_or(0),
             mem: mem,
-            regfile: regfile.clone(),
+            regfile: regfile,
             solver: solver,
             e_old: None,
             e_cur: None,
-            constructor: PathConstructor::new(SSAStorage::new(), regfile, ip.unwrap_or(0)),
+            constructor: PathConstructor::new(SSAStorage::new(), reginfo, ip.unwrap_or(0)),
             syms: HashMap::new(),
             d_map: HashMap::new(),
         }
@@ -243,7 +250,7 @@ pub fn initialize(stream: &mut R2, ip: Option<u64>, syms: Option<Vec<String>>, c
     let mut rmem = RuneMemory::new();
     let mut smt = SMTLib2::new(Some(qf_abv::QF_ABV));
     rmem.init_memory(&mut smt);
-    let mut ctx = SSAContext::new(ip, rmem, rregfile, smt);
+    let mut ctx = SSAContext::new(ip, rmem, &lreginfo.clone(), smt, rregfile);
 
     if let Some(ref sym_vars) = syms {
         for var in sym_vars {

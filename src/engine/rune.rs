@@ -109,7 +109,6 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
         if token.is_arity_zero() {
             return Ok(None);
         }
-        // println!("****");
 
         // println!("OPERANDS TO {:?}: {:?} {:?}", token, lhs, rhs);
         let l_op = self.process_in(lhs.as_ref()).expect("LHS is ERR");

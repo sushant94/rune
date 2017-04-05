@@ -1,23 +1,28 @@
 // Rather than the context having all of that information, let's move the construction logic out
 use petgraph::graph::NodeIndex;
-use libsmt::logics::qf_abv;
 
-use context::structs::{RuneRegFile};
+// Let's use the SubRegisterFile as defined in radeco-lib
+// We can later have a conversion or a singular format for 
+// RuneRegFile and SubRegisterfile.
+use radeco_lib::middle::regfile::SubRegisterFile;
 use radeco_lib::middle::ssa::ssastorage::SSAStorage;
 use radeco_lib::middle::ir::{MAddress, MOpcode};
 use radeco_lib::middle::ssa::ssa_traits::{ValueType};
 use radeco_lib::middle::ssa::cfg_traits::CFGMod;
 use radeco_lib::middle::ssa::ssa_traits::{SSAMod};
-use std::collections::{BTreeMap, HashMap};
-
+use radeco_lib::middle::ssa::ssa_traits::SSA;
 use radeco_lib::frontend::ssaconstructor::VarId;
 use radeco_lib::middle::ssa::cfg_traits::CFG;
 use radeco_lib::middle::dot;
 
+use libsmt::theories::{bitvec, core};
+use libsmt::logics::qf_abv::QF_ABV_Fn;
+
 use std::io::prelude::*;
 use std::fs::File;
+use std::collections::{BTreeMap, HashMap};
 
-use radeco_lib::middle::ssa::ssa_traits::SSA;
+use r2pipe::structs::LRegInfo;
 
 #[derive(Clone, Debug)]
 pub struct PathConstructor
@@ -25,10 +30,7 @@ pub struct PathConstructor
     ssa: SSAStorage,
     pub variable_types: Vec<ValueType>,
     current_def: Vec<BTreeMap<MAddress, NodeIndex>>,
-    // There is a bit of duplication here in that there is a regfile which is a member of the
-    // Context and there there is a regfile which is a member of the Constructor which is again a
-    // part of the context.
-    regfile: RuneRegFile,
+    regfile: SubRegisterFile,
     alias_info: HashMap<String, String>,
     constants: HashMap<u64, NodeIndex>,
     ident_map: HashMap<String, u64>,
@@ -43,12 +45,12 @@ pub struct PathConstructor
 }
 
 impl PathConstructor {
-    pub fn new(ssa: SSAStorage, regfile: RuneRegFile, ip: u64) -> PathConstructor {
+    pub fn new(ssa: SSAStorage, reg_info: &LRegInfo, ip: u64) -> PathConstructor {
         let mut pc = PathConstructor {
             ssa: ssa,
             variable_types: Vec::new(),
             current_def: Vec::new(),
-            regfile: regfile.clone(),
+            regfile: SubRegisterFile::new(reg_info),
             alias_info: HashMap::new(),
             constants: HashMap::new(),
             ident_map: HashMap::new(),
@@ -70,51 +72,50 @@ impl PathConstructor {
         //  [ end block ]
 
         // Assuming we dont need alias_info and we will be retrieving that information from the
-        // RuneRegFile based alias_info. Doesn't really matter from where it comes from.
+        // SubRegisterFile based alias_info. Doesn't really matter from where it comes from.
         {
-            let r1 = regfile.regfile.clone();
-            let identmap = &mut pc.ident_map;
-            for (r_name, entry) in r1 {
-                let reg_width = entry.get_width();
-                identmap.insert(r_name, reg_width as u64);
+            let alias_info = &mut pc.alias_info;
+            for register in &reg_info.alias_info {
+                alias_info.insert(register.reg.clone(), register.role_str.clone());
             }
-        } 
-
-        // Add variable to the HashMap
-        {
-            let r2 = regfile.regfile.clone();
-            let mut whole = Vec::new();
-            let mut reg_width: usize;
-            for (_, r_entry) in r2 {
-                reg_width = r_entry.get_width();
-                whole.push(ValueType::Integer { width: reg_width as u16 });
-            }
-            pc.add_variables(whole);
         }
+    
+        {
+            let identmap = &mut pc.ident_map;
+            for register in &reg_info.reg_info {
+                identmap.insert(register.name.clone(), register.size as u64);
+            }
+        }
+
+        let r1 = pc.regfile.whole_registers.clone();
+        pc.add_variables(r1);
         
         // Add "mem" type variable
         pc.add_variables(vec![ValueType::Integer { width: 0 }]);
 
         // Emulating init_blocks
-        let start_address = MAddress::new(0, 0);
+        let mut start_address = MAddress::new(0, 0);
         let start_block = pc.ssa.add_block(start_address);
 
         pc.blocks.insert(start_address, start_block);
         pc.ssa.mark_start_node(&start_block);
 
-        let r1 = pc.regfile.regfile.clone();
+        let r2 = pc.regfile.clone();
 
-         for (i, reg) in r1.iter().enumerate() {
-            let (reg_name, reg_entry) = reg; 
-            let vt = ValueType::Integer { width: reg_entry.get_width() as u16 };
-            let reg_comment = pc.add_comment(start_address, vt, reg_name.to_owned());
-            pc.write_variable(start_address, i, reg_comment);
+        for (i, name) in r2.whole_names.iter().enumerate() {
+            let reg = r2.whole_registers.get(i).expect("This cannot be `None`");
+            // Name the newly created nodes with register names.
+            let argnode = pc.add_comment(start_address, *reg, name.clone());
+            pc.write_variable(start_address, i, argnode);
         }
-        
+
         {
-            let reglen = pc.regfile.regfile.len();
+            // Insert "mem" pseudo variable
+            let reglen = pc.regfile.whole_names.len();
             pc.set_mem_id(reglen);
-            let mem_comment = pc.add_comment(start_address, ValueType::Integer { width: 0 }, "mem".to_owned());
+            let mem_comment = pc.add_comment(start_address,
+                                                         ValueType::Integer { width: 0 },
+                                                         "mem".to_owned());
             pc.write_variable(start_address, reglen, mem_comment);
         }
 
@@ -154,7 +155,7 @@ impl PathConstructor {
         }
     }
     
-    pub fn add_block(&mut self, at: MAddress, current_address: Option<MAddress>, edge_type: Option<u8>) -> NodeIndex {
+    pub fn add_block(&mut self, at: MAddress, current_address: Option<MAddress>, _: Option<u8>) -> NodeIndex {
         let main_block = self.new_block(at);
         let start_block = self.block_of(current_address.unwrap()).unwrap();
 
@@ -269,12 +270,118 @@ impl PathConstructor {
         self.mem_id = id;
     }
 
+    pub fn operand_width(&self, node: &NodeIndex) -> u16 {
+        match self.ssa.get_node_data(node).unwrap().vt {
+            ValueType::Integer{ ref width } => *width,
+        }
+    }
+
+    pub fn add_const(&mut self, value: u64) -> NodeIndex {
+        self.ssa.add_const(value)
+    }
+
+    pub fn read_register(&mut self, address: &mut MAddress, var: &str) -> NodeIndex {
+        let info = self.regfile.get_info(var).expect("No register found");
+        let id = info.base;
+        let mut value = self.read_variable(address, id);
+
+        let width = self.operand_width(&value);
+
+        if info.shift > 0 {
+            let shift_amount_node = self.add_const(info.shift as u64);
+            let opcode = MOpcode::OpLsr;
+            let vtype = From::from(width);
+            let op_node = self.add_op(&opcode, address, vtype);
+            self.op_use(&op_node, 0, &value);
+            self.op_use(&op_node, 1, &shift_amount_node);
+            value = op_node;
+        }
+
+        if info.width < width as usize {
+            let opcode = MOpcode::OpNarrow(info.width as u16);
+            let vtype = From::from(info.width);
+            let op_node = self.add_op(&opcode, address, vtype);
+            self.op_use(&op_node, 0, &value);
+            value = op_node;
+        }
+
+        value
+    }
+
     // Core function my bois
-    pub fn add_to_path<A, B>(&mut self, smt_fn: A, operands: B)
-        where A: Into<qf_abv::QF_ABV_Fn> + Clone,
+    pub fn add_to_path<A, B>(&mut self, smt_fn: A, operands: B, ip: u64)
+        where A: Into<QF_ABV_Fn> + Clone,
               B: AsRef<[NodeIndex]>
     {
+        let mut current_address = MAddress::new(ip, 0);
+        let smt = smt_fn.into();
 
+        // Next level hax
+        let result_size = 64 as u16;
+
+        let (op, vt) = match smt {
+            QF_ABV_Fn::BVOps(bitvec::OpCodes::BvOr) => {
+                (MOpcode::OpOr, ValueType::Integer { width: result_size })
+            },
+            QF_ABV_Fn::BVOps(bitvec::OpCodes::BvAnd) => {
+                (MOpcode::OpAnd, ValueType::Integer { width: result_size })
+            },
+            QF_ABV_Fn::BVOps(bitvec::OpCodes::BvXor) => {
+                (MOpcode::OpXor, ValueType::Integer { width: result_size })
+            },
+            QF_ABV_Fn::BVOps(bitvec::OpCodes::BvNeg) => {
+                (MOpcode::OpNot, ValueType::Integer { width: result_size })
+            },
+            QF_ABV_Fn::BVOps(bitvec::OpCodes::BvMul) => {
+                (MOpcode::OpMul, ValueType::Integer { width: result_size })
+            },
+            QF_ABV_Fn::BVOps(bitvec::OpCodes::BvAdd) => {
+                (MOpcode::OpAdd, ValueType::Integer { width: result_size })
+            },
+            QF_ABV_Fn::BVOps(bitvec::OpCodes::BvSub) => {
+                (MOpcode::OpSub, ValueType::Integer { width: result_size })
+            },
+            QF_ABV_Fn::BVOps(bitvec::OpCodes::BvUDiv) => {
+                (MOpcode::OpDiv, ValueType::Integer { width: result_size })
+            },
+            QF_ABV_Fn::BVOps(bitvec::OpCodes::BvURem) => {
+                (MOpcode::OpMod, ValueType::Integer { width: result_size })
+            },
+            QF_ABV_Fn::BVOps(bitvec::OpCodes::BvLShr) => {
+                (MOpcode::OpLsl, ValueType::Integer { width: result_size })
+            },
+            QF_ABV_Fn::BVOps(bitvec::OpCodes::BvShl) => {
+                (MOpcode::OpLsl, ValueType::Integer { width: result_size })
+            },
+            QF_ABV_Fn::BVOps(bitvec::OpCodes::BvULt) => {
+                (MOpcode::OpLt, ValueType::Integer { width: 1 })
+            },
+            QF_ABV_Fn::BVOps(bitvec::OpCodes::BvUGt) => {
+                (MOpcode::OpGt, ValueType::Integer { width: 1 })
+            },
+            _ => { 
+                println!("{:?}", smt);
+                panic!("Unknown instruction")
+            },
+         };
+
+        // Assuming there is no RHS, let's see what goes in op_use
+        let op_node = self.add_op(&op, &mut current_address, vt);
+    //    self.op_use(&op_node, 0, lhs.as_ref().expect(""));
+    }
+
+    pub fn op_use(&mut self, op: &NodeIndex, index: u8, arg: &NodeIndex) {
+        self.ssa.op_use(*op, index, *arg)
+    }
+
+    pub fn add_op(&mut self, op: &MOpcode, address: &mut MAddress, vt: ValueType) -> NodeIndex {
+        let i = self.ssa.add_op(*op, vt, None);
+        match *op {
+            MOpcode::OpConst(_) => {},
+            _ => { self.index_to_addr.insert(i, *address); },
+        }
+        address.offset += 1;
+        i
     }
 
     pub fn add_variables(&mut self, variable_types: Vec<ValueType>) {

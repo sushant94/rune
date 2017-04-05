@@ -9,6 +9,8 @@ use rune::context::context::ContextAPI;
 use r2pipe::r2::R2;
 use std::collections::HashMap;
 
+use rune::engine::engine::Engine;
+
 // XXX: NEEDS UPDATING.
 fn main() {
     let mut stream = R2::new(Some("./test_files/newcrackme")).expect("Unable to spawn r2");
@@ -52,5 +54,5 @@ fn main() {
     }
 
     let mut rune = Rune::new(ctx, explorer, stream);
-    // rune.run().expect("not yet implemented");
+    rune.run().expect("not yet implemented");
 }
