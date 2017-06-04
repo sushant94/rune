@@ -1,5 +1,8 @@
 //! `PathExplorer` that allows interactive exploration
 
+extern crate rustyline;
+use self::rustyline::Editor;
+
 use rune::explorer::explorer::PathExplorer;
 use rune::context::rune_ctx::RuneContext;
 use rune::engine::rune::RuneControl;
@@ -10,6 +13,9 @@ use libsmt::logics::qf_abv::QF_ABV_Fn;
 use libsmt::backends::z3;
 use console::Console;
 
+use std::process;
+
+const ASSERT_PROMPT: &'static str = "\x1b[1;36m>>>\x1b[0m ";
 const HELP: &'static str = "runec help menu:
 
 Branch Follow Commands:
@@ -38,6 +44,7 @@ pub enum Command {
     Help,
     Safety,
     Invalid,
+    Exit,
 }
 
 impl Command {
@@ -114,7 +121,10 @@ impl InteractiveExplorer {
         self.console.print_info("(operation) (register) (register/constant in hex)");
         self.console.print_info("Valid Operations: =, >, <, <=, >=");
 
-        if let Ok(ref line) = self.console.readline() {
+        let mut r = Editor::<()>::new();
+        r.load_history("history.txt");
+
+        if let Ok(ref line) = r.readline(ASSERT_PROMPT) {
             // Format for adding assertions:
             // (operation) (register) (register/constant in hex)
             // Valid Operations: =, >, <, <=, >=
@@ -152,6 +162,9 @@ impl InteractiveExplorer {
             };
             ctx.eval(cmd, vec![op_1, op_2]);
             self.console.print_success("Constraint Added!");
+
+            r.add_history_entry(&line);
+            r.save_history("history.txt").unwrap();
         }
     }
 }
@@ -195,6 +208,11 @@ impl PathExplorer for InteractiveExplorer {
                     Command::Safety => {
                         self.safety(ctx);
                         continue;
+                    }
+                    Command::Exit => {
+                        self.console.print_info("Thanks for using rune!");
+                        process::exit(1);
+                        break;
                     }
                     _ => {
                         continue;
