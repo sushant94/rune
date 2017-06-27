@@ -7,6 +7,7 @@ use rune::explorer::explorer::PathExplorer;
 use rune::context::rune_ctx::RuneContext;
 use rune::engine::rune::RuneControl;
 use rune::context::context::{Context, Evaluate, MemoryRead, RegisterRead};
+use rune::context::utils::{Key, convert_to_u64, to_key};
 
 use libsmt::theories::{bitvec, core};
 use libsmt::logics::qf_abv::QF_ABV_Fn;
@@ -32,7 +33,15 @@ Interpretter Commands:
   H     Print Help Menu
 ";
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+/*
+#[derive(Clone, Debug, PartialEq)]
+pub enum RType {
+    Symbolic,
+    Concrete(u64),
+}
+*/
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum Command {
     FollowTrue,
     FollowFalse,
@@ -44,6 +53,8 @@ pub enum Command {
     Help,
     Safety,
     Invalid,
+    SetContext((Key, u64)),
+    SetVar((String, String)),
     Exit,
 }
 
@@ -55,18 +66,52 @@ impl Command {
     pub fn is_valid(&self) -> bool {
         !self.is_invalid()
     }
+
+    pub fn is_set(&self) -> bool {
+        match *self {
+            Command::SetVar(_) | Command::SetContext(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_chainable(&self) -> bool {
+        !self.is_invalid() || !self.is_set()
+    }
 }
 
-impl From<char> for Command {
-    fn from(c: char) -> Command {
+impl From<String> for Command {
+    fn from(s: String) -> Command {
+        let c = s.chars().nth(0).unwrap();
         match c {
             'T' => Command::FollowTrue,
             'F' => Command::FollowFalse,
             'C' => Command::Continue,
+            // TODO: Maybe have StepInto and StepOver later
             'S' => Command::Step,
             'D' => Command::Debug,
             '?' => Command::Assertion,
             'Q' => Command::Query,
+            'E' => {
+                // This function is only used for parsing. No decision making happens here
+                let (_, cmd) = s.split_at(2);
+                let op: Vec<&str> = cmd.split("=").collect();
+
+                let reg = to_key(op[0].trim().to_owned());
+                // TODO: Set some way so that we know what value we settin
+                let val = convert_to_u64(op[1].trim().to_owned());
+
+                // TODO: Hacky way to check! We should ideally generate a parse tree.
+                // TODO: Set a way for setting range of memory as symbolic
+                if let Some(val) = convert_to_u64(op[1].trim().to_owned()) {
+                    Command::SetContext((reg, val))
+                } else {
+                    Command::Invalid
+                }
+            }
+            'e' => {
+                // Set the environment variable
+                Command::Invalid
+            }
             'H' => Command::Help,
             'X' => Command::Safety,
             _ => Command::Invalid,

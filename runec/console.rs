@@ -28,36 +28,43 @@ impl Default for Console {
     }
 }
 
+// TODO: Set values as environmental variables. This should be a feature of the console.
+// TODO: Commands which show the current state of the context.
 impl Console {
     pub fn read_command(&self) -> Vec<Command> {
-        let mut cmd;
-        let mut repeat;
-
+        let mut repeat: u32;
+        let mut cmd: Command;
         let mut r = Editor::<()>::new();
 
         if let Err(_) = r.load_history("history.txt") {
             self.print_info("No history found.");
         }
+
         loop {
-            // Add command completion
+            // TODO: Add command completion using rustyline configurations
             let readline = r.readline(PROMPT);
 
             match readline {
                 Ok(buffer) => {
                     r.add_history_entry(&buffer);
-                    cmd = if let Some(ref c) = buffer.chars().nth(0) {
-                        From::from(*c)
-                    } else {
-                        Command::Invalid
-                    };
+                    cmd = From::from(buffer.to_owned());
 
-                    repeat = buffer.trim().chars().skip(1).fold(0, |acc, c: char| {
-                        if c == ' ' {
-                            acc
+                    let mut iter = buffer.split_whitespace();
+                    iter.next();
+
+                    // Set repeat to default
+                    // TODO: Check if this can be exploited.
+                    repeat = 1;
+
+                    if cmd.is_chainable() {
+                        repeat = if let Some(num) = iter.next() {
+                            num.chars().fold(0, |acc, c:char| {
+                                acc*10 + c.to_digit(10).unwrap()
+                            })
                         } else {
-                            (acc * 10) + c.to_digit(10).unwrap()
+                            1
                         }
-                    });
+                    }
 
                     if cmd.is_valid() {
                         break;

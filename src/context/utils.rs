@@ -7,7 +7,7 @@ use libsmt::logics::qf_abv;
 
 use std::collections::HashMap;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Key {
     Mem(usize),
     Reg(String),
@@ -27,6 +27,27 @@ pub fn to_key<T: AsRef<str>>(s: T) -> Key {
     }
 }
 
+pub fn convert_to_u64<T: AsRef<str>>(s: T) -> Option<u64> {
+    let v = s.as_ref();
+    if v.len() > 2 && &v[0..2] == "0x" {
+        let val = usize::from_str_radix(&v[2..], 16);
+
+        if let Ok(val) = usize::from_str_radix(&v[2..], 16) {
+            Some(val as u64)
+        } else {
+            None
+        }
+    } else if v.chars().nth(0).unwrap().is_digit(10) {
+        if let Ok(val) = usize::from_str_radix(&v, 10) {
+            Some(val as u64)
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
 pub fn new_ctx(ip: Option<u64>,
                syms: Option<Vec<String>>,
                consts: Option<HashMap<String, u64>>)
@@ -34,6 +55,7 @@ pub fn new_ctx(ip: Option<u64>,
     let rregfile = {
         use r2pipe::r2::R2;
         let mut r2 = R2::new(Some("malloc://64".to_owned())).expect("Unable to spawn r2!");
+        // TODO: Fix it based on the binary being used.
         r2.send("e asm.bits = 64");
         r2.send("e asm.arch = x86");
         r2.flush();
