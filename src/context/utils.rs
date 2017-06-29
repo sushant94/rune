@@ -7,7 +7,7 @@ use libsmt::logics::qf_abv;
 
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum Key {
     Mem(usize),
     Reg(String),
@@ -49,7 +49,7 @@ pub fn convert_to_u64<T: AsRef<str>>(s: T) -> Option<u64> {
 }
 
 pub fn new_ctx(ip: Option<u64>,
-               syms: Option<Vec<String>>,
+               syms: Option<Vec<Key>>,
                consts: Option<HashMap<String, u64>>)
                -> RuneContext {
     let rregfile = {
@@ -71,7 +71,7 @@ pub fn new_ctx(ip: Option<u64>,
 
     if let Some(ref sym_vars) = syms {
         for var in sym_vars {
-            let  _ = match to_key(var) {
+            let  _ = match *var {
                 Key::Mem(addr) => ctx.set_mem_as_sym(addr, 64),
                 Key::Reg(ref reg) => ctx.set_reg_as_sym(reg),
             };

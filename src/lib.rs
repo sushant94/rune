@@ -13,6 +13,7 @@ extern crate r2pipe;
 extern crate rustc_serialize;
 extern crate regex;
 #[macro_use] extern crate libsmt;
+#[macro_use] extern crate serde_derive;
 
 pub mod context {
     pub mod context;
@@ -24,6 +25,7 @@ pub mod explorer {
     pub mod explorer;
     pub mod dfs;
     pub mod bfs;
+    pub mod command;
 }
 
 pub mod engine {

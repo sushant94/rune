@@ -17,16 +17,17 @@ regex = "*"
 clippy = {version = "0.0.61", optional = true}
 docopt = "*"
 rustyline = "1.0.0"
+serde = "*"
+serde_derive = "*"
 
 [dependencies.libsmt]
 path = "../libsmt-rs"
 
-
-#[dependencies.radeco-lib]
-#path = "../radeco-lib/"
+[dependencies.radeco-lib]
+git = "https://github.com/radare/radeco-lib"
 
 [dependencies.esil]
-path = "../esil-rs/"
+git = "https://github.com/radare/esil-rs"
 
 [dependencies.r2pipe]
-path = "../r2pipe.rs/"
+git = "https://github.com/radare/r2pipe.rs"

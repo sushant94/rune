@@ -7,7 +7,7 @@ use self::rustyline::Editor;
 use std::io::{self, Read, Write};
 use std::iter;
 
-use interact::Command;
+use rune::explorer::command::Command;
 
 // Defining default constants for the prompt.
 static PROMPT: &'static str = "\x1b[1;32m>>>\x1b[0m ";
@@ -28,7 +28,6 @@ impl Default for Console {
     }
 }
 
-// TODO: Set values as environmental variables. This should be a feature of the console.
 // TODO: Commands which show the current state of the context.
 impl Console {
     pub fn read_command(&self) -> Vec<Command> {
@@ -49,14 +48,12 @@ impl Console {
                     r.add_history_entry(&buffer);
                     cmd = From::from(buffer.to_owned());
 
-                    let mut iter = buffer.split_whitespace();
-                    iter.next();
-
-                    // Set repeat to default
-                    // TODO: Check if this can be exploited.
                     repeat = 1;
+                    println!("{:?}", cmd);
 
                     if cmd.is_chainable() {
+                        let mut iter = buffer.split_whitespace();
+                        iter.next();
                         repeat = if let Some(num) = iter.next() {
                             num.chars().fold(0, |acc, c:char| {
                                 acc*10 + c.to_digit(10).unwrap()
@@ -75,7 +72,6 @@ impl Console {
                     repeat = 1;
                 },
                 Err(ReadlineError::Eof) => {
-                    println!("[!] CTRL-D");
                     cmd = Command::Exit;
                     repeat = 1;
                     break;

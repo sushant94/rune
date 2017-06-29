@@ -4,6 +4,7 @@ extern crate rustyline;
 use self::rustyline::Editor;
 
 use rune::explorer::explorer::PathExplorer;
+use rune::explorer::command::Command;
 use rune::context::rune_ctx::RuneContext;
 use rune::engine::rune::RuneControl;
 use rune::context::context::{Context, Evaluate, MemoryRead, RegisterRead};
@@ -23,101 +24,22 @@ Branch Follow Commands:
   T     Follow `True` branch
   F     Follow `False` branch
 
-Interpretter Commands:
+Interpreter Commands:
   C     Continue Execution
   S     Single Step Instruction
   D     Print Debug information
   ?     Add Assertion
   Q     Query Constraint Solver
   X     Add safety assertions
+  R     Run
   H     Print Help Menu
+  -------------------------------
+  Initial State Configuration: 
+  * E <reg/mem> = <value>
+    eg. E rip = 0x9000 (To set to a constant value)
+        E rax = ! (To set symbolic)
+    Set register or memory to a certain value or set symbolic
 ";
-
-/*
-#[derive(Clone, Debug, PartialEq)]
-pub enum RType {
-    Symbolic,
-    Concrete(u64),
-}
-*/
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum Command {
-    FollowTrue,
-    FollowFalse,
-    Continue,
-    Step,
-    Debug,
-    Assertion,
-    Query,
-    Help,
-    Safety,
-    Invalid,
-    SetContext((Key, u64)),
-    SetVar((String, String)),
-    Exit,
-}
-
-impl Command {
-    pub fn is_invalid(&self) -> bool {
-        *self == Command::Invalid
-    }
-
-    pub fn is_valid(&self) -> bool {
-        !self.is_invalid()
-    }
-
-    pub fn is_set(&self) -> bool {
-        match *self {
-            Command::SetVar(_) | Command::SetContext(_) => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_chainable(&self) -> bool {
-        !self.is_invalid() || !self.is_set()
-    }
-}
-
-impl From<String> for Command {
-    fn from(s: String) -> Command {
-        let c = s.chars().nth(0).unwrap();
-        match c {
-            'T' => Command::FollowTrue,
-            'F' => Command::FollowFalse,
-            'C' => Command::Continue,
-            // TODO: Maybe have StepInto and StepOver later
-            'S' => Command::Step,
-            'D' => Command::Debug,
-            '?' => Command::Assertion,
-            'Q' => Command::Query,
-            'E' => {
-                // This function is only used for parsing. No decision making happens here
-                let (_, cmd) = s.split_at(2);
-                let op: Vec<&str> = cmd.split("=").collect();
-
-                let reg = to_key(op[0].trim().to_owned());
-                // TODO: Set some way so that we know what value we settin
-                let val = convert_to_u64(op[1].trim().to_owned());
-
-                // TODO: Hacky way to check! We should ideally generate a parse tree.
-                // TODO: Set a way for setting range of memory as symbolic
-                if let Some(val) = convert_to_u64(op[1].trim().to_owned()) {
-                    Command::SetContext((reg, val))
-                } else {
-                    Command::Invalid
-                }
-            }
-            'e' => {
-                // Set the environment variable
-                Command::Invalid
-            }
-            'H' => Command::Help,
-            'X' => Command::Safety,
-            _ => Command::Invalid,
-        }
-    }
-}
 
 #[derive(Debug, Clone, Default)]
 pub struct InteractiveExplorer {

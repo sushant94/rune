@@ -22,7 +22,9 @@ use rune::engine::engine::Engine;
 use interact::InteractiveExplorer;
 use r2pipe::r2::R2;
 use rune::stream::InstructionStream;
-use rune::context::rune_ctx::RuneContext;
+use rune::context::rune_ctx::{RuneContext, RInitialState};
+use console::Console;
+use rune::explorer::command::Command;
 
 static USAGE: &'static str = "
 runec. Interactive console for rune.
@@ -54,9 +56,19 @@ fn main() {
     let mut stream = R2::new(Some(args.get_str("FILE"))).expect("Unable to spawn r2");
     stream.init();
 
-    // Create a console here.
-    //loop {
-    // }
+    let mut c: Console = Default::default();
+    let mut is: RInitialState = RInitialState::new(); 
+
+    loop {
+        match c.read_command()[0] {
+            Command::SetContext((ref key, ref val)) => {
+                if val.is_symbolic() {
+                    is.add_sym(key.clone());
+                }
+            },
+            _ => break,
+        }
+    }
 
     /* let ctx = utils::new_ctx(args.flag_start, Some(sym_vars), Some(const_vars));
     let mut explorer = InteractiveExplorer::new();
