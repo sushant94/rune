@@ -4,7 +4,7 @@ extern crate rustyline;
 use self::rustyline::Editor;
 
 use rune::explorer::explorer::PathExplorer;
-use rune::explorer::command::Command;
+use rune::explorer::interactive::Command;
 use rune::context::rune_ctx::RuneContext;
 use rune::engine::rune::RuneControl;
 use rune::context::context::{Context, Evaluate, MemoryRead, RegisterRead};
@@ -17,30 +17,6 @@ use console::Console;
 
 use std::process;
 
-const ASSERT_PROMPT: &'static str = "\x1b[1;36m>>>\x1b[0m ";
-const HELP: &'static str = "runec help menu:
-
-Branch Follow Commands:
-  T     Follow `True` branch
-  F     Follow `False` branch
-
-Interpreter Commands:
-  C     Continue Execution
-  S     Single Step Instruction
-  D     Print Debug information
-  ?     Add Assertion
-  Q     Query Constraint Solver
-  X     Add safety assertions
-  R     Run
-  H     Print Help Menu
-  -------------------------------
-  Initial State Configuration: 
-  * E <reg/mem> = <value>
-    eg. E rip = 0x9000 (To set to a constant value)
-        E rax = ! (To set symbolic)
-    Set register or memory to a certain value or set symbolic
-";
-
 #[derive(Debug, Clone, Default)]
 pub struct InteractiveExplorer {
     console: Console,
@@ -51,10 +27,6 @@ pub struct InteractiveExplorer {
 }
 
 impl InteractiveExplorer {
-    pub fn help(&self) {
-        self.console.print_info(HELP);
-    }
-
     // Adds Assertions for safety.
     pub fn safety(&self, ctx: &mut RuneContext) {
         let rbp = ctx.reg_read("rbp");
@@ -84,14 +56,8 @@ impl InteractiveExplorer {
     }
 
     pub fn add_assertion(&self, ctx: &mut RuneContext) {
-        self.console.print_info("Adding assertions");
-        self.console.print_info("(operation) (register) (register/constant in hex)");
-        self.console.print_info("Valid Operations: =, >, <, <=, >=");
-
-        let mut r = Editor::<()>::new();
-        r.load_history("history.txt");
-
-        if let Ok(ref line) = r.readline(ASSERT_PROMPT) {
+        self.console.print_assertion_help();
+        if let Ok(ref line) = self.console.readline() {
             // Format for adding assertions:
             // (operation) (register) (register/constant in hex)
             // Valid Operations: =, >, <, <=, >=
@@ -129,9 +95,6 @@ impl InteractiveExplorer {
             };
             ctx.eval(cmd, vec![op_1, op_2]);
             self.console.print_success("Constraint Added!");
-
-            r.add_history_entry(&line);
-            r.save_history("history.txt").unwrap();
         }
     }
 }
@@ -169,7 +132,7 @@ impl PathExplorer for InteractiveExplorer {
                         continue;
                     }
                     Command::Help => {
-                        self.help();
+                        self.console.print_help();
                         continue;
                     }
                     Command::Safety => {

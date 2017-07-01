@@ -2,20 +2,25 @@
 
 use std::collections::HashMap;
 
-use explorer::command::Command;
 use r2pipe::structs::LRegInfo;
+
 use petgraph::graph::NodeIndex;
+
+use serde_json::{to_string, from_reader};
+
+use std::fs::File;
+use std::io::prelude::*;
+
 use libsmt::backends::smtlib2::{SMTLib2, SMTProc};
 use libsmt::backends::backend::SMTBackend;
 use libsmt::logics::qf_abv;
 use libsmt::theories::{array_ex, bitvec, core};
-use context::utils::{Key, new_ctx};
 
+use context::utils::{Key, new_ctx};
 use context::context::{Context, ContextAPI, Evaluate, MemoryRead, MemoryWrite, RegisterRead,
                        RegisterWrite};
 
 // TODO: Handle symbolic jumps
-
 #[derive(Clone, Debug)]
 pub struct RuneContext {
     ip: u64,
@@ -29,16 +34,14 @@ pub struct RuneContext {
 }
 
 // TODO: Allow to convert this to a r2 project. This will be useful in the long run.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RInitialState {
     start_addr: Option<u64>,
-    end_addr: Option<u64>,
-    bp_list: Option<Vec<u64>>,
-    const_list: Option<HashMap<String, u64>>,
-    sym_list: Option<Vec<Key>>,
-    env_var_list: Option<HashMap<String, String>>,
-    cmd_history: Option<Vec<Command>>,
-    notes: Option<String>,
+    // end_addr: Option<u64>,
+    breakpoints: Option<Vec<u64>>,
+    constants: Option<Vec<(Key, u64)>>,
+    sym_vars: Option<Vec<Key>>,
+    env_vars: Option<HashMap<String, String>>,
 }
 
 impl RInitialState {
@@ -46,63 +49,73 @@ impl RInitialState {
         Default::default()
     }
 
+    pub fn get_string(&self) -> String {
+        to_string(self).unwrap()
+    }
+
+    // TODO: Again, fix this shit.
+    pub fn get_breakpoints(&self) -> Vec<u64> {
+        if let Some(ref bp) = self.breakpoints {
+            bp.clone()
+        } else {
+            Vec::new()
+        }
+    }
+
     pub fn set_start_addr(&mut self, start_addr: u64) {
         self.start_addr = Some(start_addr);
     }
 
+    /*
     pub fn set_end_addr(&mut self, end_addr: u64) {
         self.end_addr = Some(end_addr);
     }
+    */
 
     pub fn add_breakpoint(&mut self, bp: u64) {
-        if let Some(ref mut bp_list) = self.bp_list {
-            bp_list.push(bp);
+        if let Some(ref mut breakpoints) = self.breakpoints {
+            breakpoints.push(bp);
         }
     }
 
-    pub fn add_const(&mut self, const_val: (&str, u64)) {
-        if let Some(ref mut const_list) = self.const_list {
-            const_list.insert(const_val.0.to_owned(), const_val.1);
+    pub fn add_const(&mut self, const_val: (Key, u64)) {
+        if let Some(ref mut constants) = self.constants {
+            constants.push(const_val);
         }
     }
 
     pub fn add_sym(&mut self, sym_val: Key) {
-        if let Some(ref mut sym_list) = self.sym_list {
-            sym_list.push(sym_val);
-        }
-    }
-
-    pub fn add_notes(&mut self, new_note: &str) {
-        if let Some(ref mut curr_note) = self.notes {
-            curr_note.push_str(new_note);
-        } else {
-            self.notes = Some(new_note.to_owned());
+        if let Some(ref mut sym_vars) = self.sym_vars {
+            sym_vars.push(sym_val);
         }
     }
 
     pub fn write_to_json(&self) {
+        let mut file = File::create("state.json").unwrap();
+        let s = to_string(&self).unwrap();
+        file.write_all(s.as_bytes());
     }
 
-    pub fn import_from_json(path: &str) -> RInitialState {
-        Default::default()
+    pub fn import_from_json<T: AsRef<str>>(path: T) -> RInitialState {
+        let v = path.as_ref();
+        let file = File::open(v).unwrap();
+        from_reader(file).unwrap()
     }
 
     pub fn create_context(&self) ->  RuneContext {
-        new_ctx(self.start_addr, self.sym_list.clone(), self.const_list.clone())
+        new_ctx(self.start_addr, self.sym_vars.clone(), self.constants.clone())
     }
 }
 
 impl Default for RInitialState {
     fn default() -> RInitialState {
         RInitialState {
-            start_addr: Some(0x8000),
-            end_addr: Some(0x8000),
-            bp_list: Some(Vec::new()),
-            const_list: Some(HashMap::new()),
-            sym_list: Some(Vec::new()),
-            env_var_list: Some(HashMap::new()),
-            cmd_history: Some(Vec::new()),
-            notes: Some(String::from("")),
+            start_addr: Some(0x0000),
+            // end_addr: Some(0x8000),
+            breakpoints: Some(Vec::new()),
+            constants: Some(Vec::new()),
+            sym_vars: Some(Vec::new()),
+            env_vars: Some(HashMap::new()),
         }
     }
 }

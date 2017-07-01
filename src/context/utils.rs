@@ -7,10 +7,24 @@ use libsmt::logics::qf_abv;
 
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum ValType {
+    Concrete(usize),
+    Symbolic,
+    Break,
+    Unknown(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Key {
     Mem(usize),
     Reg(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SAssignment {
+    pub lvalue: Key,
+    pub rvalue: ValType,
 }
 
 /// Hex/Decimal to Memory address, any other string maps to Registers
@@ -24,6 +38,33 @@ pub fn to_key<T: AsRef<str>>(s: T) -> Key {
         Key::Mem(usize::from_str_radix(&v, 10).expect("Invalid number!"))
     } else {
         Key::Reg(v.to_owned())
+    }
+}
+
+pub fn to_valtype<T: AsRef<str>>(s: T) -> Option<ValType> {
+    let v = s.as_ref();
+
+    if v == "SYM" {
+        Some(ValType::Symbolic)
+    } else if let Some(val) = convert_to_u64(v) {
+        Some(ValType::Concrete(val as usize))
+    } else {
+        None
+    }
+}
+
+pub fn to_assignment<T: AsRef<str>>(s: T) -> Option<SAssignment> {
+    let v = s.as_ref();
+    let ops: Vec<&str> = v.split("=").collect();
+
+    let lvalue: Key = to_key(ops[0].trim());
+    if let Some(rvalue) = to_valtype(ops[1].trim()) {
+        Some(SAssignment {
+                lvalue: lvalue,
+                rvalue: rvalue,
+            })
+    } else {
+        None
     }
 }
 
@@ -50,7 +91,7 @@ pub fn convert_to_u64<T: AsRef<str>>(s: T) -> Option<u64> {
 
 pub fn new_ctx(ip: Option<u64>,
                syms: Option<Vec<Key>>,
-               consts: Option<HashMap<String, u64>>)
+               consts: Option<Vec<(Key, u64)>>)
                -> RuneContext {
     let rregfile = {
         use r2pipe::r2::R2;
@@ -79,13 +120,12 @@ pub fn new_ctx(ip: Option<u64>,
     }
 
     if let Some(ref const_var) = consts {
-        for (k, v) in const_var {
-            let _ = match to_key(k) {
-                Key::Mem(addr) => ctx.set_mem_as_const(addr, *v, 64),
-                Key::Reg(ref reg) => ctx.set_reg_as_const(reg, *v),
+        for &(ref k, v) in const_var.iter() {
+            let _ = match *k {
+                Key::Mem(addr) => ctx.set_mem_as_const(addr, v, 64),
+                Key::Reg(ref reg) => ctx.set_reg_as_const(reg, v),
             };
         }
     }
-
     ctx
 }

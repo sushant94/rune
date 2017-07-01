@@ -7,16 +7,48 @@ use self::rustyline::Editor;
 use std::io::{self, Read, Write};
 use std::iter;
 
-use rune::explorer::command::Command;
+use rune::explorer::interactive::Command;
 
 // Defining default constants for the prompt.
 static PROMPT: &'static str = "\x1b[1;32m>>>\x1b[0m ";
 static OUTPUT: &'static str = "< ";
+static ASSERT_HELP: &'static str = "
+Adding assertions:
+<operation> <register> <reg/const in hex>
+Valid operations: =, >, <, <=, >=
+";
+static HELP: &'static str = "runec help menu:
+
+Branch Follow Commands:
+  T     Follow `True` branch
+  F     Follow `False` branch
+
+Interpreter Commands:
+  C     Continue Execution
+  S     Single Step Instruction
+  D     Print Debug information
+  ?     Add Assertion
+  Q     Query Constraint Solver
+  X     Add safety assertions
+  R     Run
+  H     Print Help Menu
+  -------------------------------
+  Initial State Configuration: 
+  * E <reg/mem> = <value>
+    eg. E rip = 0x9000 (To set to a constant value)
+        E rax = SYM (To set symbolic)
+    Set register or memory to a certain value or set symbolic
+  * b <addr>
+    eg. b 0x9000
+    Set breakpoint for the emulator
+";
 
 #[derive(Clone, Debug)]
 pub struct Console {
     prompt: String,
     out_prompt: String,
+    help: String,
+    assert_help: String,
 }
 
 impl Default for Console {
@@ -24,6 +56,8 @@ impl Default for Console {
         Console {
             prompt: PROMPT.to_owned(),
             out_prompt: OUTPUT.to_owned(),
+            help: HELP.to_owned(),
+            assert_help: ASSERT_HELP.to_owned(),
         }
     }
 }
@@ -49,7 +83,6 @@ impl Console {
                     cmd = From::from(buffer.to_owned());
 
                     repeat = 1;
-                    println!("{:?}", cmd);
 
                     if cmd.is_chainable() {
                         let mut iter = buffer.split_whitespace();
@@ -89,6 +122,7 @@ impl Console {
     }
 
     pub fn readline(&self) -> io::Result<String> {
+        // Add history?
         self.print_prompt();
         let mut buffer = String::new();
         io::stdin().read_line(&mut buffer);
@@ -98,6 +132,14 @@ impl Console {
     pub fn print_prompt(&self) {
         print!("{}", self.prompt);
         io::stdout().flush().ok().expect("Could not flush stdout");
+    }
+
+    pub fn print_help(&self) {
+        self.print_info(&self.help);
+    }
+
+    pub fn print_assertion_help(&self) {
+        println!("{}", self.assert_help);
     }
 
     pub fn print(&self) {

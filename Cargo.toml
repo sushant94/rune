@@ -19,6 +19,7 @@ docopt = "*"
 rustyline = "1.0.0"
 serde = "*"
 serde_derive = "*"
+serde_json = "*"
 
 [dependencies.libsmt]
 path = "../libsmt-rs"

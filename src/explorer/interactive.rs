@@ -1,25 +1,6 @@
 //! Defines Commands available to the Explorer.
 
-use context::utils::{Key, to_key, convert_to_u64};
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub enum ValType {
-    Symbolic,
-    Concrete,
-}
-
-impl ValType {
-    pub fn is_symbolic(&self) -> bool {
-        match *self {
-            ValType::Symbolic => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_concrete(&self) -> bool {
-        !self.is_symbolic() 
-    }
-}
+use context::utils::{Key, to_key, convert_to_u64, to_assignment, SAssignment, ValType};
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum Command {
@@ -32,10 +13,11 @@ pub enum Command {
     Run,
     Query,
     Help,
+    Save,
     Safety,
     Invalid,
-    SetContext((Key, ValType)),
-    SetVar((String, String)),
+    SetContext(SAssignment),
+    SetVar(SAssignment),
     Exit,
 }
 
@@ -64,30 +46,38 @@ impl Command {
  * Maybe have StepInto and StepOver later.
  * Reserve 'e' for environment variables.
  * Add method to set memory range as symbolic
+ * Have r2 style self-documentation
  */
 impl From<String> for Command {
     fn from(s: String) -> Command {
-        let c = s.chars().nth(0).unwrap();
-        match c {
+        match s.chars().nth(0).unwrap() {
             'T' => Command::FollowTrue,
             'F' => Command::FollowFalse,
-            'C' => Command::Continue,
-            'S' => Command::Step,
+            'c' => Command::Continue,
+            's' => Command::Step,
+            'b' => {
+                let (_, addr) = s.split_at(2);
+                if let Some(val) = convert_to_u64(addr.trim()) {
+                    Command::SetContext(SAssignment {
+                        lvalue: Key::Mem(val as usize),
+                        rvalue: ValType::Break,
+                    })
+                } else {
+                    Command::Invalid
+                }
+            }
             'D' => Command::Debug,
             '?' => Command::Assertion,
             'Q' => Command::Query,
             'E' => {
                 let (_, cmd) = s.split_at(2);
-                let op: Vec<&str> = cmd.split("=").collect();
-
-                let reg = to_key(op[0].trim().to_owned());
-
-                if let Some(val) = convert_to_u64(op[1].trim().to_owned()) {
-                    Command::SetContext((reg, ValType::Concrete))
+                if let Some(val) = to_assignment(cmd) {
+                    Command::SetContext(val)
                 } else {
-                    Command::SetContext((reg, ValType::Symbolic))
+                    Command::Invalid
                 }
             }
+            'S' => Command::Save,
             'H' => Command::Help,
             'R' => Command::Run,
             'X' => Command::Safety,
