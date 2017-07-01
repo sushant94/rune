@@ -1,6 +1,6 @@
 //! Defines Commands available to the Explorer.
 
-use context::utils::{Key, to_key, convert_to_u64, to_assignment, SAssignment, ValType};
+use context::utils::{Key, convert_to_u64, to_assignment, SAssignment, ValType};
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum Command {

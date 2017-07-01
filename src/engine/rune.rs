@@ -2,8 +2,7 @@
 
 use r2pipe::structs::LOpInfo;
 
-use context::context::{Context, Evaluate, MemoryRead, MemoryWrite, RegisterRead, RegisterWrite};
-use context::rune_ctx::RuneContext;
+use context::context::{Context, RegisterRead};
 use explorer::explorer::PathExplorer;
 use stream::InstructionStream;
 use engine::engine::{Engine, EngineError, EngineResult};
@@ -207,18 +206,14 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
             // println!("{}", self.ctx.ip());
             let opinfo = if let Some(opinfo_) = self.stream.at(self.ctx.ip()) {
                 opinfo_
+            } else if self.explorer.next_job(&mut self.ctx).is_some() {
+                // Request for next instruction from queue
+                self.stream.at(self.ctx.ip()).unwrap()
             } else {
-                // Request for a new state from queue.
-                if let Some(_) = self.explorer.next_job(&mut self.ctx) {
-                    self.stream.at(self.ctx.ip()).unwrap()
-                } else {
-                    break;
-                }
+                break;
             };
 
             let esil = opinfo.esil.as_ref().unwrap();
-
-            // println!("{}", esil);
 
             // Increment ip by instruction width
             let width = opinfo.size.as_ref().unwrap();

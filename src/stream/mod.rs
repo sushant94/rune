@@ -41,7 +41,7 @@ impl InstructionStream for R2 {
 // This is useful for tests, debug and other smaller applications.
 // Maintains a HashMap from address to LOpInfo that it should provide
 // when asked for that address.
-#[derive(Clone, Debug, RustcDecodable)]
+#[derive(Clone, Debug, RustcDecodable, Default)]
 pub struct FileStream<I, Op>
     where I: Debug + Clone + Decodable + Hash + PartialEq + Eq,
           Op: Debug + Clone + Decodable

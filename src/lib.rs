@@ -3,7 +3,7 @@
 //! Radare2 Symbolic Emulator for all!
 //! TODO: Add project notes, descriptions and notes.
 
-// Support for extra lints for clippy
+// Support additional lints using clippy
 #![cfg_attr(feature="clippy", feature(plugin))]
 #![cfg_attr(feature="clippy", plugin(clippy))]
 
@@ -12,7 +12,7 @@ extern crate esil;
 extern crate r2pipe;
 extern crate rustc_serialize;
 extern crate regex;
-#[macro_use] extern crate libsmt;
+extern crate libsmt;
 #[macro_use] extern crate serde_derive;
 extern crate serde;
 extern crate serde_json;

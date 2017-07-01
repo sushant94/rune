@@ -1,14 +1,10 @@
 //! `PathExplorer` that allows interactive exploration
 
-extern crate rustyline;
-use self::rustyline::Editor;
-
 use rune::explorer::explorer::PathExplorer;
 use rune::explorer::interactive::Command;
 use rune::context::rune_ctx::RuneContext;
-use rune::engine::rune::RuneControl;
 use rune::context::context::{Context, Evaluate, MemoryRead, RegisterRead};
-use rune::context::utils::{Key, convert_to_u64, to_key};
+use rune::engine::rune::RuneControl;
 
 use libsmt::theories::{bitvec, core};
 use libsmt::logics::qf_abv::QF_ABV_Fn;
@@ -122,33 +118,29 @@ impl PathExplorer for InteractiveExplorer {
                     Command::Debug => {
                         self.print_debug(ctx);
                         continue;
-                    }
+                    },
                     Command::Assertion => {
                         self.add_assertion(ctx);
                         continue;
-                    }
+                    },
                     Command::Query => {
                         self.query_constraints(ctx);
                         continue;
-                    }
+                    },
                     Command::Help => {
                         self.console.print_help();
                         continue;
-                    }
+                    },
                     Command::Safety => {
                         self.safety(ctx);
                         continue;
-                    }
+                    },
                     Command::Exit => {
                         self.console.print_info("Thanks for using rune!");
                         process::exit(1);
-                        break;
-                    }
-                    _ => {
-                        continue;
-                    }
+                    },
+                    _ => continue,
                 };
-                break;
             }
         }
         RuneControl::Continue

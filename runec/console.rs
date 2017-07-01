@@ -4,12 +4,11 @@ extern crate rustyline;
 use self::rustyline::error::ReadlineError;
 use self::rustyline::Editor;
 
-use std::io::{self, Read, Write};
+use std::io::{self, Write};
 use std::iter;
 
 use rune::explorer::interactive::Command;
 
-// Defining default constants for the prompt.
 static PROMPT: &'static str = "\x1b[1;32m>>>\x1b[0m ";
 static OUTPUT: &'static str = "< ";
 static ASSERT_HELP: &'static str = "
@@ -30,6 +29,7 @@ Interpreter Commands:
   ?     Add Assertion
   Q     Query Constraint Solver
   X     Add safety assertions
+  S     Save current state as json to 'state.json'
   R     Run
   H     Print Help Menu
   -------------------------------
@@ -62,10 +62,9 @@ impl Default for Console {
     }
 }
 
-// TODO: Commands which show the current state of the context.
 impl Console {
     pub fn read_command(&self) -> Vec<Command> {
-        let mut repeat: u32;
+        let mut repeat: u32 = 1;
         let mut cmd: Command;
         let mut r = Editor::<()>::new();
 
@@ -81,8 +80,6 @@ impl Console {
                 Ok(buffer) => {
                     r.add_history_entry(&buffer);
                     cmd = From::from(buffer.to_owned());
-
-                    repeat = 1;
 
                     if cmd.is_chainable() {
                         let mut iter = buffer.split_whitespace();
@@ -101,8 +98,8 @@ impl Console {
                     }
                 },
                 Err(ReadlineError::Interrupted) => {
-                    cmd = Command::Invalid;
                     repeat = 1;
+                    continue;
                 },
                 Err(ReadlineError::Eof) => {
                     cmd = Command::Exit;
@@ -111,9 +108,8 @@ impl Console {
                 }, 
                 Err(err) => {
                     println!("[!] Error: {:?}", err);
-                    cmd = Command::Invalid;
                     repeat = 1;
-                    break;
+                    continue;
                 }
             }
         }
@@ -122,10 +118,9 @@ impl Console {
     }
 
     pub fn readline(&self) -> io::Result<String> {
-        // Add history?
         self.print_prompt();
         let mut buffer = String::new();
-        io::stdin().read_line(&mut buffer);
+        let _ = io::stdin().read_line(&mut buffer);
         Ok(buffer)
     }
 
@@ -140,10 +135,6 @@ impl Console {
 
     pub fn print_assertion_help(&self) {
         println!("{}", self.assert_help);
-    }
-
-    pub fn print(&self) {
-        println!("{}", self.out_prompt);
     }
 
     pub fn print_success(&self, s: &str) {

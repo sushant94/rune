@@ -2,10 +2,9 @@
 
 use context::rune_ctx::{RuneContext, RuneMemory, RuneRegFile};
 use context::context::{ContextAPI};
+
 use libsmt::backends::smtlib2::SMTLib2;
 use libsmt::logics::qf_abv;
-
-use std::collections::HashMap;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum ValType {
@@ -35,7 +34,7 @@ pub fn to_key<T: AsRef<str>>(s: T) -> Key {
     if v.len() > 2 && &v[0..2] == "0x" {
         Key::Mem(usize::from_str_radix(&v[2..], 16).expect("Invalid number!"))
     } else if v.chars().nth(0).unwrap().is_digit(10) {
-        Key::Mem(usize::from_str_radix(&v, 10).expect("Invalid number!"))
+        Key::Mem(usize::from_str_radix(v, 10).expect("Invalid number!"))
     } else {
         Key::Reg(v.to_owned())
     }
@@ -55,7 +54,7 @@ pub fn to_valtype<T: AsRef<str>>(s: T) -> Option<ValType> {
 
 pub fn to_assignment<T: AsRef<str>>(s: T) -> Option<SAssignment> {
     let v = s.as_ref();
-    let ops: Vec<&str> = v.split("=").collect();
+    let ops: Vec<&str> = v.split('=').collect();
 
     let lvalue: Key = to_key(ops[0].trim());
     if let Some(rvalue) = to_valtype(ops[1].trim()) {
@@ -71,15 +70,13 @@ pub fn to_assignment<T: AsRef<str>>(s: T) -> Option<SAssignment> {
 pub fn convert_to_u64<T: AsRef<str>>(s: T) -> Option<u64> {
     let v = s.as_ref();
     if v.len() > 2 && &v[0..2] == "0x" {
-        let val = usize::from_str_radix(&v[2..], 16);
-
         if let Ok(val) = usize::from_str_radix(&v[2..], 16) {
             Some(val as u64)
         } else {
             None
         }
     } else if v.chars().nth(0).unwrap().is_digit(10) {
-        if let Ok(val) = usize::from_str_radix(&v, 10) {
+        if let Ok(val) = usize::from_str_radix(v, 10) {
             Some(val as u64)
         } else {
             None
@@ -90,8 +87,8 @@ pub fn convert_to_u64<T: AsRef<str>>(s: T) -> Option<u64> {
 }
 
 pub fn new_ctx(ip: Option<u64>,
-               syms: Option<Vec<Key>>,
-               consts: Option<Vec<(Key, u64)>>)
+               syms: &Option<Vec<Key>>,
+               consts: &Option<Vec<(Key, u64)>>)
                -> RuneContext {
     let rregfile = {
         use r2pipe::r2::R2;
@@ -110,7 +107,7 @@ pub fn new_ctx(ip: Option<u64>,
     rmem.init_memory(&mut smt);
     let mut ctx = RuneContext::new(ip, rmem, rregfile, smt);
 
-    if let Some(ref sym_vars) = syms {
+    if let Some(ref sym_vars) = *syms {
         for var in sym_vars {
             let  _ = match *var {
                 Key::Mem(addr) => ctx.set_mem_as_sym(addr, 64),
@@ -119,7 +116,7 @@ pub fn new_ctx(ip: Option<u64>,
         }
     }
 
-    if let Some(ref const_var) = consts {
+    if let Some(ref const_var) = *consts {
         for &(ref k, v) in const_var.iter() {
             let _ = match *k {
                 Key::Mem(addr) => ctx.set_mem_as_const(addr, v, 64),

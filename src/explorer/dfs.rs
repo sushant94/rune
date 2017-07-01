@@ -32,6 +32,7 @@ impl<C: Context> SavedState<C> {
 }
 
 /// An explorer that traverses the program states in a depth first order.
+#[derive(Default)]
 pub struct DFSExplorer<Ctx: Context> {
     /// Depth First Queue
     queue: VecDeque<SavedState<Ctx>>,

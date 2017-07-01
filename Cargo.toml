@@ -13,10 +13,10 @@ path = "runec/main.rs"
 [dependencies]
 petgraph = "*"
 rustc-serialize = "*"
+clippy = {version = "*", optional = true}
 regex = "*"
-clippy = {version = "0.0.61", optional = true}
 docopt = "*"
-rustyline = "1.0.0"
+rustyline = "*"
 serde = "*"
 serde_derive = "*"
 serde_json = "*"

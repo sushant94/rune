@@ -1,15 +1,12 @@
 //! Defibreak;
 
-use std::collections::HashMap;
-
-use r2pipe::structs::LRegInfo;
-
-use petgraph::graph::NodeIndex;
-
-use serde_json::{to_string, from_reader};
-
 use std::fs::File;
 use std::io::prelude::*;
+
+use r2pipe::structs::LRegInfo;
+use petgraph::graph::NodeIndex;
+use serde_json::{to_string, from_reader};
+use std::collections::HashMap;
 
 use libsmt::backends::smtlib2::{SMTLib2, SMTProc};
 use libsmt::backends::backend::SMTBackend;
@@ -93,7 +90,7 @@ impl RInitialState {
     pub fn write_to_json(&self) {
         let mut file = File::create("state.json").unwrap();
         let s = to_string(&self).unwrap();
-        file.write_all(s.as_bytes());
+        let _ = file.write_all(s.as_bytes());
     }
 
     pub fn import_from_json<T: AsRef<str>>(path: T) -> RInitialState {
@@ -103,7 +100,7 @@ impl RInitialState {
     }
 
     pub fn create_context(&self) ->  RuneContext {
-        new_ctx(self.start_addr, self.sym_vars.clone(), self.constants.clone())
+        new_ctx(self.start_addr, &self.sym_vars, &self.constants)
     }
 }
 
@@ -373,7 +370,7 @@ impl Evaluate for RuneContext {
     {
         // TODO: Add extract / concat to ensure that the registers are of compatible
         // sizes for operations.
-        self.solver.assert(smt_fn, &operands.as_ref())
+        self.solver.assert(smt_fn, operands.as_ref())
     }
 }
 
@@ -411,7 +408,7 @@ impl ContextAPI for RuneContext {
     }
 
     fn set_mem_as_sym(&mut self, addr: usize, write_size: u64) -> NodeIndex {
-        assert!(write_size == 64, "TODO: Unimplemented set_mem for size < 64!");
+        assert_eq!(write_size, 64, "TODO: Unimplemented set_mem for size < 64!");
 
         let key = format!("mem_{}", addr);
         let sym = self.solver.new_var(Some(&key), qf_abv::bv_sort(64));
