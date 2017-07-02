@@ -19,28 +19,29 @@ Valid operations: =, >, <, <=, >=
 static HELP: &'static str = "runec help menu:
 
 Branch Follow Commands:
-  T     Follow `True` branch
-  F     Follow `False` branch
-
+  t     Follow `True` branch
+  f     Follow `False` branch
+-------------------------------------------------------------
 Interpreter Commands:
-  C     Continue Execution
-  S     Single Step Instruction
-  D     Print Debug information
+  c     Continue Execution
+  s     Single Step Instruction
+  r     Run
+  dS    Debug State
+  dQ    Debug contraints
   ?     Add Assertion
   Q     Query Constraint Solver
-  X     Add safety assertions
+  x     Add safety assertions
   S     Save current state as json to 'state.json'
-  R     Run
-  H     Print Help Menu
-  -------------------------------
-  Initial State Configuration: 
-  * E <reg/mem> = <value>
-    eg. E rip = 0x9000 (To set to a constant value)
-        E rax = SYM (To set symbolic)
-    Set register or memory to a certain value or set symbolic
-  * b <addr>
-    eg. b 0x9000
-    Set breakpoint for the emulator
+  h     Print Help Menu
+-------------------------------------------------------------
+Initial State Configuration: 
+ * e <reg/mem> = <value>
+   eg. E rip = 0x9000 (To set to a constant value)
+       E rax = SYM (To set symbolic)
+   Set register or memory to a certain value or set symbolic
+ * b <addr>
+   eg. b 0x9000
+   Set breakpoint for the emulator
 ";
 
 #[derive(Clone, Debug)]

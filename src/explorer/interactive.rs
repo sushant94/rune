@@ -8,7 +8,8 @@ pub enum Command {
     FollowFalse,
     Continue,
     Step,
-    Debug,
+    DebugQuery,
+    DebugState,
     Assertion,
     Run,
     Query,
@@ -50,38 +51,54 @@ impl Command {
  */
 impl From<String> for Command {
     fn from(s: String) -> Command {
-        match s.chars().nth(0).unwrap() {
-            'T' => Command::FollowTrue,
-            'F' => Command::FollowFalse,
-            'c' => Command::Continue,
-            's' => Command::Step,
-            'b' => {
-                let (_, addr) = s.split_at(2);
-                if let Some(val) = convert_to_u64(addr.trim()) {
-                    Command::SetContext(SAssignment {
-                        lvalue: Key::Mem(val as usize),
-                        rvalue: ValType::Break,
-                    })
-                } else {
-                    Command::Invalid
+        if let Some(c) = s.chars().nth(0) { 
+            match c {
+                // dc -> debug context
+                // dq debug query
+                't' => Command::FollowTrue,
+                'f' => Command::FollowFalse,
+                'c' => Command::Continue,
+                's' => Command::Step,
+                'b' => {
+                    let (_, addr) = s.split_at(2);
+                    if let Some(val) = convert_to_u64(addr.trim()) {
+                        Command::SetContext(SAssignment {
+                            lvalue: Key::Mem(val as usize),
+                            rvalue: ValType::Break,
+                        })
+                    } else {
+                        Command::Invalid
+                    }
                 }
-            }
-            'D' => Command::Debug,
-            '?' => Command::Assertion,
-            'Q' => Command::Query,
-            'E' => {
-                let (_, cmd) = s.split_at(2);
-                if let Some(val) = to_assignment(cmd) {
-                    Command::SetContext(val)
-                } else {
-                    Command::Invalid
+                'd' => {
+                    if let Some(c2) = s.chars().nth(1) {
+                        match c2 {
+                            'S' => Command::DebugState,
+                            'Q' => Command::DebugQuery,
+                            _ => Command::Invalid,
+                        } 
+                    } else {
+                        Command::Invalid
+                    }
+                },
+                '?' => Command::Assertion,
+                'Q' => Command::Query,
+                'e' => {
+                    let (_, cmd) = s.split_at(2);
+                    if let Some(val) = to_assignment(cmd) {
+                        Command::SetContext(val)
+                    } else {
+                        Command::Invalid
+                    }
                 }
+                'S' => Command::Save,
+                'h' => Command::Help,
+                'r' => Command::Run,
+                'x' => Command::Safety,
+                _ => Command::Invalid,
             }
-            'S' => Command::Save,
-            'H' => Command::Help,
-            'R' => Command::Run,
-            'X' => Command::Safety,
-            _ => Command::Invalid,
+        } else {
+            Command::Invalid
         }
     }
 }

@@ -115,7 +115,7 @@ impl PathExplorer for InteractiveExplorer {
                 self.single_step = match self.console.read_command()[0] {
                     Command::Step => true,
                     Command::Continue => false,
-                    Command::Debug => {
+                    Command::DebugQuery => {
                         self.print_debug(ctx);
                         continue;
                     },
@@ -141,6 +141,7 @@ impl PathExplorer for InteractiveExplorer {
                     },
                     _ => continue,
                 };
+                break;
             }
         }
         RuneControl::Continue

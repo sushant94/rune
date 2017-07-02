@@ -99,8 +99,8 @@ impl RInitialState {
         from_reader(file).unwrap()
     }
 
-    pub fn create_context(&self) ->  RuneContext {
-        new_ctx(self.start_addr, &self.sym_vars, &self.constants)
+    pub fn create_context(&self, lreginfo: &mut LRegInfo) ->  RuneContext {
+        new_ctx(self.start_addr, &self.sym_vars, &self.constants, lreginfo)
     }
 }
 
@@ -378,10 +378,13 @@ impl ContextAPI for RuneContext {
     fn set_reg_as_const<T: AsRef<str>>(&mut self, reg: T, val: u64) -> NodeIndex {
         let rentry = self.regfile.regfile[reg.as_ref()].clone();
         // Assert that the register is not currently set/defined.
-        assert!(self.regfile.current_regs[rentry.idx].is_none());
-        let cval = self.define_const(val, 64);
-        self.regfile.current_regs[rentry.idx] = Some(cval);
-        cval
+        if let Some(cval) = self.regfile.current_regs[rentry.idx] {
+            cval
+        } else {
+            let cval = self.define_const(val, 64);
+            self.regfile.current_regs[rentry.idx] = Some(cval);
+            cval
+        } 
     }
 
     fn set_reg_as_sym<T: AsRef<str>>(&mut self, reg: T) -> NodeIndex {
@@ -465,7 +468,8 @@ mod test {
 
     #[test]
     fn ctx_reg_write() {
-        let mut ctx = utils::new_ctx(None, None, None);
+        let mut lreginfo = Default::default();
+        let mut ctx = utils::new_ctx(None, &None, &None, &mut lreginfo);
         let const_8 = ctx.define_const(8, 64);
 
         // Test setting rax to 8
@@ -479,7 +483,8 @@ mod test {
 
     #[test]
     fn ctx_reg_read() {
-        let mut ctx = utils::new_ctx(None, None, None);
+        let mut lreginfo = Default::default();
+        let mut ctx = utils::new_ctx(None, &None, &None, &mut lreginfo);
 
         ctx.set_reg_as_sym("rax");
 
@@ -508,7 +513,8 @@ mod test {
 
     #[test]
     fn ctx_reg_solve_simple() {
-        let mut ctx = utils::new_ctx(None, None, None);
+        let mut lreginfo = Default::default();
+        let mut ctx = utils::new_ctx(None, &None, &None, &mut lreginfo);
         // Set rdi and rsi as symbolic
         ctx.set_reg_as_sym("rdi");
         ctx.set_reg_as_sym("rsi");
@@ -540,7 +546,8 @@ mod test {
 
     #[test]
     fn ctx_mem_read_write() {
-        let mut ctx = utils::new_ctx(None, None, None);
+        let mut lreginfo = Default::default();
+        let mut ctx = utils::new_ctx(None, &None, &None, &mut lreginfo);
 
         ctx.set_reg_as_sym("rax");
 
@@ -559,7 +566,8 @@ mod test {
 
     #[test]
     fn ctx_mem_sym_read_write() {
-        let mut ctx = utils::new_ctx(None, None, None);
+        let mut lreginfo = Default::default();
+        let mut ctx = utils::new_ctx(None, &None, &None, &mut lreginfo);
 
         ctx.set_mem_as_sym(0xff41, 64);
         ctx.set_mem_as_sym(0xfe41, 64);
@@ -586,7 +594,8 @@ mod test {
 
     #[test]
     fn ctx_test_ip() {
-        let mut ctx = utils::new_ctx(None, None, None);
+        let mut lreginfo = Default::default();
+        let mut ctx = utils::new_ctx(None, &None, &None, &mut lreginfo);
 
         ctx.set_ip(0xbadcafe);
         assert_eq!(ctx.ip(), 0xbadcafe);
@@ -597,27 +606,31 @@ mod test {
 
     #[test]
     fn ctx_test_alias() {
-        let ctx = utils::new_ctx(None, None, None);
+        let mut lreginfo = Default::default();
+        let mut ctx = utils::new_ctx(None, &None, &None, &mut lreginfo);
         assert_eq!(ctx.alias_of("rip".to_owned()), Some("PC".to_owned()));
     }
 
     #[test]
     #[should_panic]
     fn ctx_unset_access_esil_old() {
-        let ctx = utils::new_ctx(None, None, None);
+        let mut lreginfo = Default::default();
+        let mut ctx = utils::new_ctx(None, &None, &None, &mut lreginfo);
         ctx.e_old();
     }
 
     #[test]
     #[should_panic]
     fn ctx_unset_access_esil_cur() {
-        let ctx = utils::new_ctx(None, None, None);
+        let mut lreginfo = Default::default();
+        let mut ctx = utils::new_ctx(None, &None, &None, &mut lreginfo);
         ctx.e_cur();
     }
 
     #[test]
     fn ctx_access_esil_old_cur() {
-        let mut ctx = utils::new_ctx(None, None, None);
+        let mut lreginfo = Default::default();
+        let mut ctx = utils::new_ctx(None, &None, &None, &mut lreginfo);
         let const_8 = ctx.define_const(8, 64);
         let const_32 = ctx.define_const(32, 64);
 
@@ -641,14 +654,16 @@ mod test {
     #[test]
     #[should_panic]
     fn ctx_read_before_set() {
-        let mut ctx = utils::new_ctx(None, None, None);
+        let mut lreginfo = Default::default();
+        let mut ctx = utils::new_ctx(None, &None, &None, &mut lreginfo);
         ctx.reg_read("zf");
     }
 
     #[test]
     #[should_panic]
     fn ctx_invalid_reg() {
-        let mut ctx = utils::new_ctx(None, None, None);
+        let mut lreginfo = Default::default();
+        let mut ctx = utils::new_ctx(None, &None, &None, &mut lreginfo);
         ctx.reg_read("asassa");
     }
 }

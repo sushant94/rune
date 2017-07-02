@@ -60,6 +60,8 @@ fn main() {
     let mut stream = R2::new(Some(args.get_str("<file>"))).expect("Unable to spawn r2");
     stream.init();
 
+    let mut lreginfo = stream.reg_info().expect("Unable to retrieve register info.");
+
     let c: Console = Default::default();
     let mut is: RInitialState = RInitialState::new(); 
 
@@ -75,7 +77,7 @@ fn main() {
                 let mut explorer = InteractiveExplorer::new();
                 explorer.bp = is.get_breakpoints();
 
-                let ctx = is.create_context();
+                let ctx = is.create_context(&mut lreginfo);
 
                 let mut rune = Rune::new(ctx, explorer, stream);
                 rune.run().expect("Rune Error!");
@@ -89,7 +91,7 @@ fn main() {
                 is.write_to_json();
                 continue;
             },
-            Command::Debug => {
+            Command::DebugState => {
                 // TODO: It would be better if we pretty print the debug message.
                 c.print_info(&is.get_string());
                 continue;

@@ -1,5 +1,7 @@
 //! Utilities and other miscellaneous functions for `RuneContext`
 
+use r2pipe::structs::LRegInfo;
+
 use context::rune_ctx::{RuneContext, RuneMemory, RuneRegFile};
 use context::context::{ContextAPI};
 
@@ -88,19 +90,10 @@ pub fn convert_to_u64<T: AsRef<str>>(s: T) -> Option<u64> {
 
 pub fn new_ctx(ip: Option<u64>,
                syms: &Option<Vec<Key>>,
-               consts: &Option<Vec<(Key, u64)>>)
+               consts: &Option<Vec<(Key, u64)>>,
+               mut lreginfo: &mut LRegInfo)
                -> RuneContext {
-    let rregfile = {
-        use r2pipe::r2::R2;
-        let mut r2 = R2::new(Some("malloc://64".to_owned())).expect("Unable to spawn r2!");
-        // TODO: Fix it based on the binary being used.
-        r2.send("e asm.bits = 64");
-        r2.send("e asm.arch = x86");
-        r2.flush();
-        let mut lreginfo = r2.reg_info().expect("Unable to retrieve register information!");
-        r2.close();
-        RuneRegFile::new(&mut lreginfo)
-    };
+    let rregfile = RuneRegFile::new(&mut lreginfo);
 
     let mut rmem = RuneMemory::new();
     let mut smt = SMTLib2::new(Some(qf_abv::QF_ABV));
@@ -124,5 +117,10 @@ pub fn new_ctx(ip: Option<u64>,
             };
         }
     }
+
+    for register in &lreginfo.reg_info {
+        ctx.set_reg_as_const(register.name.clone(), 0);
+    }
+
     ctx
 }
