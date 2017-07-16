@@ -8,6 +8,7 @@ extern crate libsmt;
 extern crate docopt;
 extern crate rustc_serialize;
 extern crate r2pipe;
+extern crate r2api;
 
 mod interact;
 mod console;
@@ -26,6 +27,7 @@ use interact::InteractiveExplorer;
 use console::Console;
 
 use r2pipe::r2::R2;
+use r2api::api_trait::R2Api;
 
 static USAGE: &'static str = "
 runec. Interactive console for rune.

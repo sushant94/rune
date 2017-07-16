@@ -3,7 +3,7 @@
 use std::fs::File;
 use std::io::prelude::*;
 
-use r2pipe::structs::LRegInfo;
+use r2api::structs::LRegInfo;
 use petgraph::graph::NodeIndex;
 use serde_json::{to_string, from_reader};
 use std::collections::HashMap;

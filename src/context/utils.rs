@@ -1,6 +1,6 @@
 //! Utilities and other miscellaneous functions for `RuneContext`
 
-use r2pipe::structs::LRegInfo;
+use r2api::structs::LRegInfo;
 
 use context::rune_ctx::{RuneContext, RuneMemory, RuneRegFile};
 use context::context::{ContextAPI};

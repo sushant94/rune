@@ -1,6 +1,6 @@
 //! Trait and struct implementations for rune symbolic engine
 
-use r2pipe::structs::LOpInfo;
+use r2api::structs::LOpInfo;
 
 use context::context::{Context, RegisterRead};
 use explorer::explorer::PathExplorer;
