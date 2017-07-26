@@ -5,6 +5,8 @@ use rune::explorer::interactive::Command;
 use rune::context::rune_ctx::RuneContext;
 use rune::context::context::{Context, Evaluate, MemoryRead, RegisterRead};
 use rune::engine::rune::RuneControl;
+use rune::memory::qword_mem::QWordMemory;
+use rune::regstore::regfile::RuneRegFile;
 
 use libsmt::theories::{bitvec, core};
 use libsmt::logics::qf_abv::QF_ABV_Fn;
@@ -24,7 +26,7 @@ pub struct InteractiveExplorer {
 
 impl InteractiveExplorer {
     // Adds Assertions for safety.
-    pub fn safety(&self, ctx: &mut RuneContext) {
+    pub fn safety(&self, ctx: &mut RuneContext<QWordMemory, RuneRegFile>) {
         let rbp = ctx.reg_read("rbp");
         let const_8 = ctx.define_const(8, 64);
         let ret_addr = ctx.eval(bitvec::OpCodes::BvAdd, vec![rbp, const_8]);
@@ -34,12 +36,12 @@ impl InteractiveExplorer {
         ctx.eval(core::OpCodes::Cmp, vec![mem_at_addr, const_trash]);
     }
 
-    pub fn print_debug(&self, ctx: &RuneContext) {
+    pub fn print_debug(&self, ctx: &RuneContext<QWordMemory, RuneRegFile>) {
         self.console.print_info("DEBUG");
         self.console.print_info(&format!("Constraints:\n{}", ctx.solver.generate_asserts()));
     }
 
-    pub fn query_constraints(&self, ctx: &mut RuneContext) {
+    pub fn query_constraints(&self, ctx: &mut RuneContext<QWordMemory, RuneRegFile>) {
         let mut z3: z3::Z3 = Default::default();
         let result = ctx.solve(&mut z3);
 
@@ -51,7 +53,7 @@ impl InteractiveExplorer {
         }
     }
 
-    pub fn add_assertion(&self, ctx: &mut RuneContext) {
+    pub fn add_assertion(&self, ctx: &mut RuneContext<QWordMemory, RuneRegFile>) {
         self.console.print_assertion_help();
         if let Ok(ref line) = self.console.readline() {
             // Format for adding assertions:
@@ -97,7 +99,7 @@ impl InteractiveExplorer {
 
 impl PathExplorer for InteractiveExplorer {
     type C = RuneControl;
-    type Ctx = RuneContext;
+    type Ctx = RuneContext<QWordMemory, RuneRegFile>;
 
     fn new() -> InteractiveExplorer {
         InteractiveExplorer {

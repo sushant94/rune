@@ -141,7 +141,7 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
                 return Ok(None);
             }
             Token::EPoke(size) => {
-                self.ctx.mem_write(l_op.unwrap(), r_op.unwrap(), size as u64);
+                self.ctx.mem_write(l_op.unwrap(), r_op.unwrap(), size as usize);
                 return Ok(None);
             }
             Token::ENop => return Ok(None),
@@ -150,7 +150,7 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
 
         let result = match token {
             Token::EPeek(size) => {
-                self.ctx.mem_read(l_op.unwrap(), size as u64)
+                self.ctx.mem_read(l_op.unwrap(), size as usize)
             }
             Token::ECmp | Token::ELt | Token::EGt => {
                 // This case is a bit different as we want the result to be a bitvector rather

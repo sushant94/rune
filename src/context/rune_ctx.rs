@@ -1,4 +1,4 @@
-//! Defibreak;
+//! Define break;
 
 use std::fs::File;
 use std::io::prelude::*;
@@ -13,265 +13,34 @@ use libsmt::backends::backend::SMTBackend;
 use libsmt::logics::qf_abv;
 use libsmt::theories::{array_ex, bitvec, core};
 
-use context::utils::{Key, new_ctx};
-use context::context::{Context, ContextAPI, Evaluate, MemoryRead, MemoryWrite, RegisterRead,
-                       RegisterWrite};
+use memory::memory::Memory;
+use memory::qword_mem::QWordMemory;
 
-// TODO: Handle symbolic jumps
+use regstore::regstore::{RegStore, RegEntry, RegStoreAPI};
+use regstore::regfile::RuneRegFile;
+
+use utils::utils::{Key, new_ctx};
+use context::context::{Context, ContextAPI, Evaluate, RegisterRead, RegisterWrite, MemoryRead, MemoryWrite};
+
 #[derive(Clone, Debug)]
-pub struct RuneContext {
+pub struct RuneContext<Mem, Reg> 
+    where Mem: Memory,
+          Reg: RegStore
+{
     ip: u64,
     pub solver: SMTLib2<qf_abv::QF_ABV>,
-    regfile: RuneRegFile,
-    mem: RuneMemory,
+    regstore: Reg,
+    mem: Mem,
     e_old: Option<NodeIndex>,
     e_cur: Option<NodeIndex>,
-    /// FIXME
+    // FIXME: Move syms out. 
     pub syms: HashMap<String, NodeIndex>,
 }
 
-// TODO: Allow to convert this to a r2 project. This will be useful in the long run.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RInitialState {
-    start_addr: Option<u64>,
-    // end_addr: Option<u64>,
-    breakpoints: Option<Vec<u64>>,
-    constants: Option<Vec<(Key, u64)>>,
-    sym_vars: Option<Vec<Key>>,
-    env_vars: Option<HashMap<String, String>>,
-}
-
-impl RInitialState {
-    pub fn new() -> RInitialState {
-        Default::default()
-    }
-
-    pub fn get_string(&self) -> String {
-        to_string(self).unwrap()
-    }
-
-    // TODO: Again, fix this shit.
-    pub fn get_breakpoints(&self) -> Vec<u64> {
-        if let Some(ref bp) = self.breakpoints {
-            bp.clone()
-        } else {
-            Vec::new()
-        }
-    }
-
-    pub fn set_start_addr(&mut self, start_addr: u64) {
-        self.start_addr = Some(start_addr);
-    }
-
-    /*
-    pub fn set_end_addr(&mut self, end_addr: u64) {
-        self.end_addr = Some(end_addr);
-    }
-    */
-
-    pub fn add_breakpoint(&mut self, bp: u64) {
-        if let Some(ref mut breakpoints) = self.breakpoints {
-            breakpoints.push(bp);
-        }
-    }
-
-    pub fn add_const(&mut self, const_val: (Key, u64)) {
-        if let Some(ref mut constants) = self.constants {
-            constants.push(const_val);
-        }
-    }
-
-    pub fn add_sym(&mut self, sym_val: Key) {
-        if let Some(ref mut sym_vars) = self.sym_vars {
-            sym_vars.push(sym_val);
-        }
-    }
-
-    pub fn write_to_json(&self) {
-        let mut file = File::create("state.json").unwrap();
-        let s = to_string(&self).unwrap();
-        let _ = file.write_all(s.as_bytes());
-    }
-
-    pub fn import_from_json<T: AsRef<str>>(path: T) -> RInitialState {
-        let v = path.as_ref();
-        let file = File::open(v).unwrap();
-        from_reader(file).unwrap()
-    }
-
-    pub fn create_context(&self, lreginfo: &mut LRegInfo) ->  RuneContext {
-        new_ctx(self.start_addr, &self.sym_vars, &self.constants, lreginfo)
-    }
-}
-
-impl Default for RInitialState {
-    fn default() -> RInitialState {
-        RInitialState {
-            start_addr: Some(0x0000),
-            // end_addr: Some(0x8000),
-            breakpoints: Some(Vec::new()),
-            constants: Some(Vec::new()),
-            sym_vars: Some(Vec::new()),
-            env_vars: Some(HashMap::new()),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct RuneMemory {
-    map: Option<NodeIndex>,
-}
-
-#[derive(Clone, Debug, Default)]
-struct RegEntry {
-    name: String,
-    idx: usize,
-    // 0 indexed
-    start_bit: usize,
-    end_bit: usize,
-    is_whole: bool,
-    alias: Option<String>,
-}
-
-impl RegEntry {
-    fn new(name: String,
-           idx: usize,
-           sbit: usize,
-           ebit: usize,
-           is_whole: bool,
-           alias: Option<String>)
-           -> RegEntry {
-        RegEntry {
-            name: name,
-            idx: idx,
-            start_bit: sbit,
-            end_bit: ebit,
-            is_whole: is_whole,
-            alias: alias,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct RuneRegFile {
-    current_regs: Vec<Option<NodeIndex>>,
-    regfile: HashMap<String, RegEntry>,
-    alias_info: HashMap<String, String>,
-}
-
-impl RuneRegFile {
-    pub fn new(reginfo: &mut LRegInfo) -> RuneRegFile {
-        let mut cur_regs = Vec::new();
-        let mut regfile = HashMap::new();
-        let mut seen_offsets = Vec::new();
-        let mut alias_info = HashMap::new();
-        reginfo.reg_info.sort_by(|x, y| (y.offset + y.size).cmp(&(x.offset + x.size)));
-        for register in &reginfo.reg_info {
-            let (idx, s_bit, e_bit, is_whole) = if !seen_offsets.contains(&register.offset) &&
-                                                   (register.type_str == "gpr" || register.type_str == "flg") {
-                cur_regs.push(None);
-                seen_offsets.push(register.offset);
-                (cur_regs.len() - 1, 0, register.size - 1, true)
-            } else {
-                let mut found = 0;
-                for (i, offset) in seen_offsets.iter().enumerate() {
-                    if register.offset == *offset {
-                        found = i;
-                        break;
-                    }
-                }
-                (found, 0, register.size - 1, false)
-            };
-
-            regfile.insert(register.name.clone(),
-                           RegEntry::new(register.name.clone(), idx, s_bit, e_bit, is_whole, None));
-        }
-
-        for alias in &reginfo.alias_info {
-            alias_info.insert(alias.role_str.clone(), alias.reg.clone());
-            // Add this alias info in the corresponding RegEntry too.
-            if let Some(info) = regfile.get_mut(&alias.reg) {
-                info.alias = Some(alias.role_str.clone());
-            }
-        }
-
-        RuneRegFile {
-            current_regs: cur_regs,
-            regfile: regfile,
-            alias_info: alias_info,
-        }
-    }
-
-    fn read(&mut self, reg_name: &str, solver: &mut SMTLib2<qf_abv::QF_ABV>) -> NodeIndex {
-        let rentry = &self.regfile.get(reg_name).expect("Unknown Register");
-        let idx = self.current_regs[rentry.idx].expect("Unset register - Undefined Behavior. \
-                                                        Consider setting an initial value before use!");
-        if rentry.is_whole {
-            idx
-        } else {
-            solver.assert(bitvec::OpCodes::Extract((rentry.end_bit) as u64, 0), &[idx])
-        }
-    }
-
-    // TODO: This is not totally correct as the sizes of registers may not match.
-    fn write(&mut self, dest: &str, source: NodeIndex) -> Option<NodeIndex> {
-        let rentry = &self.regfile[dest];
-        let e_old = self.current_regs[rentry.idx];
-        self.current_regs[rentry.idx] = Some(source);
-        e_old
-    }
-}
-
-impl RuneMemory {
-    pub fn new() -> RuneMemory {
-        RuneMemory { map: None }
-    }
-
-    pub fn init_memory(&mut self, solver: &mut SMTLib2<qf_abv::QF_ABV>) {
-        let bv_array = qf_abv::array_sort(qf_abv::bv_sort(64), qf_abv::bv_sort(64));
-        let idx_ = solver.new_var(Some("mem"), bv_array);
-        // Set memory to all 0s
-        let arr_const_ty = qf_abv::array_const(qf_abv::bv_sort(64),
-                                               qf_abv::bv_sort(64),
-                                               bitvec::OpCodes::Const(0, 64));
-        let const_0 = solver.new_const(arr_const_ty);
-        solver.assert(core::OpCodes::Cmp, &[idx_, const_0]);
-        self.map = Some(idx_);
-    }
-
-    pub fn read(&mut self,
-                addr: NodeIndex,
-                read_size: u64,
-                solver: &mut SMTLib2<qf_abv::QF_ABV>)
-                -> NodeIndex {
-        if self.map.is_none() {
-            self.init_memory(solver);
-        }
-        let mem = self.map.unwrap();
-        let idx = solver.assert(array_ex::OpCodes::Select, &[mem, addr]);
-        if read_size < 64 {
-            solver.assert(bitvec::OpCodes::Extract(read_size - 1, 1), &[idx])
-        } else {
-            idx
-        }
-    }
-
-    // TODO: Need to handle the case where write_size is not 64.
-    pub fn write(&mut self,
-                 addr: NodeIndex,
-                 data: NodeIndex,
-                 _write_size: u64,
-                 solver: &mut SMTLib2<qf_abv::QF_ABV>) {
-        if self.map.is_none() {
-            self.init_memory(solver);
-        }
-        let mem = self.map.unwrap();
-        let new_mem = solver.assert(array_ex::OpCodes::Store, &[mem, addr, data]);
-        self.map = Some(new_mem);
-    }
-}
-
-impl Context for RuneContext {
+impl<Mem, Reg> Context for RuneContext<Mem, Reg>
+    where Mem: Memory<VarRef=NodeIndex>,
+          Reg: RegStore<VarRef=NodeIndex>
+{
     fn set_e_old(&mut self, i: NodeIndex) {
         self.e_old = Some(i);
     }
@@ -311,7 +80,7 @@ impl Context for RuneContext {
     }
 
     fn alias_of(&self, reg: String) -> Option<String> {
-        self.regfile.regfile[&reg].alias.clone()
+        self.regstore.get_reg_entry(&reg).alias.clone()
     }
 
     fn solve<S: SMTProc>(&mut self, p: &mut S) -> HashMap<NodeIndex, u64> {
@@ -323,20 +92,27 @@ impl Context for RuneContext {
     }
 }
 
-impl RegisterRead for RuneContext {
+impl<Mem, Reg> RegisterRead for RuneContext<Mem, Reg>
+where Mem: Memory<VarRef=NodeIndex>,
+      Reg: RegStore<VarRef=NodeIndex>
+{
     type VarRef = NodeIndex;
 
     fn reg_read<T: AsRef<str>>(&mut self, reg: T) -> NodeIndex {
-        self.regfile.read(reg.as_ref(), &mut self.solver)
+        self.regstore.read(reg.as_ref(), &mut self.solver)
     }
 }
 
-impl RegisterWrite for RuneContext {
+impl<Mem, Reg> RegisterWrite for RuneContext<Mem, Reg> 
+where Mem: Memory<VarRef=NodeIndex>,
+      Reg: RegStore<VarRef=NodeIndex>
+{
     type VarRef = NodeIndex;
 
     fn reg_write<T: AsRef<str>>(&mut self, reg: T, source: NodeIndex) {
-        let e_old = self.regfile.write(reg.as_ref(), source);
+        let e_old = self.regstore.write(reg.as_ref(), source);
         // XXX: THIS IS A HACK!
+        // IF NOT REG
         if !reg.as_ref().to_owned().ends_with('f') {
             self.e_old = e_old;
             self.e_cur = Some(source);
@@ -344,23 +120,32 @@ impl RegisterWrite for RuneContext {
     }
 }
 
-impl MemoryRead for RuneContext {
+impl<Mem, Reg> MemoryRead for RuneContext<Mem, Reg>
+where Mem: Memory<VarRef=NodeIndex>,
+      Reg: RegStore<VarRef=NodeIndex>
+{
     type VarRef = NodeIndex;
-
-    fn mem_read(&mut self, addr: NodeIndex, size: u64) -> NodeIndex {
-        self.mem.read(addr, size, &mut self.solver)
+    
+    fn mem_read(&mut self, addr: NodeIndex, read_size: usize) -> NodeIndex {
+        self.mem.read(addr, read_size, &mut self.solver)
     }
 }
 
-impl  MemoryWrite for RuneContext {
+impl<Mem, Reg> MemoryWrite for RuneContext<Mem, Reg>
+where Mem: Memory<VarRef=NodeIndex>,
+      Reg: RegStore<VarRef=NodeIndex>
+{
     type VarRef = NodeIndex;
 
-    fn mem_write(&mut self, addr: NodeIndex, data: NodeIndex, write_size: u64) {
+    fn mem_write(&mut self, addr: NodeIndex, data: NodeIndex, write_size: usize) {
         self.mem.write(addr, data, write_size, &mut self.solver);
     }
 }
 
-impl Evaluate for RuneContext {
+impl<Mem, Reg> Evaluate for RuneContext<Mem, Reg>
+where Mem: Memory<VarRef=NodeIndex>,
+      Reg: RegStore<VarRef=NodeIndex>
+{
     type VarRef = NodeIndex;
     type IFn = qf_abv::QF_ABV_Fn;
 
@@ -374,32 +159,34 @@ impl Evaluate for RuneContext {
     }
 }
 
-impl ContextAPI for RuneContext {
+impl<Mem, Reg> ContextAPI for RuneContext<Mem, Reg>
+where Mem: Memory<VarRef=NodeIndex>,
+      Reg: RegStore<VarRef=NodeIndex> + RegStoreAPI
+{
     fn set_reg_as_const<T: AsRef<str>>(&mut self, reg: T, val: u64) -> NodeIndex {
-        let rentry = self.regfile.regfile[reg.as_ref()].clone();
         // Assert that the register is not currently set/defined.
-        if let Some(cval) = self.regfile.current_regs[rentry.idx] {
+        if let Some(cval) = self.regstore.get_reg_ref(reg.as_ref()) {
             cval
         } else {
             let cval = self.define_const(val, 64);
-            self.regfile.current_regs[rentry.idx] = Some(cval);
+            self.regstore.set_reg(reg.as_ref(), cval);
             cval
         } 
     }
 
     fn set_reg_as_sym<T: AsRef<str>>(&mut self, reg: T) -> NodeIndex {
-        let rentry = self.regfile.regfile[reg.as_ref()].clone();
         // Assert that the register is not currently set/defined.
-        assert!(self.regfile.current_regs[rentry.idx].is_none());
+        assert!(self.regstore.get_reg_ref(reg.as_ref()).is_none());
+
         let sym = self.solver.new_var(Some(reg.as_ref()), qf_abv::bv_sort(64));
-        self.regfile.current_regs[rentry.idx] = Some(sym);
+        self.regstore.set_reg(reg.as_ref(), sym);
         self.syms.insert(reg.as_ref().to_owned(), sym);
         sym
     }
 
-    fn set_mem_as_const(&mut self, addr: usize, val: u64, write_size: u64) -> NodeIndex {
-        let cval = self.define_const(val, write_size as usize);
-        let addr = self.define_const(addr as u64, 64);
+    fn set_mem_as_const(&mut self, addr: u64, val: u64, write_size: usize) -> NodeIndex {
+        let cval = self.define_const(val, write_size);
+        let addr = self.define_const(addr, 64);
         
         // (MAJOR) TODO
         if write_size < 64 {
@@ -410,7 +197,7 @@ impl ContextAPI for RuneContext {
         cval
     }
 
-    fn set_mem_as_sym(&mut self, addr: usize, write_size: u64) -> NodeIndex {
+    fn set_mem_as_sym(&mut self, addr: u64, write_size: usize) -> NodeIndex {
         assert_eq!(write_size, 64, "TODO: Unimplemented set_mem for size < 64!");
 
         let key = format!("mem_{}", addr);
@@ -423,7 +210,7 @@ impl ContextAPI for RuneContext {
 
     fn zero_registers(&mut self) {
         let cval = Some(self.define_const(0, 64));
-        for reg in &mut self.regfile.current_regs {
+        for reg in &mut self.regstore.get_regs() {
             if reg.is_none() {
                 *reg = cval;
             }
@@ -435,16 +222,19 @@ impl ContextAPI for RuneContext {
     }
 }
 
-impl RuneContext {
+impl<Mem, Reg> RuneContext<Mem, Reg>
+where Mem: Memory,
+      Reg: RegStore
+{
     pub fn new(ip: Option<u64>,
-               mem: RuneMemory,
-               regfile: RuneRegFile,
+               mem: Mem,
+               regstore: Reg,
                solver: SMTLib2<qf_abv::QF_ABV>)
-               -> RuneContext {
+               -> RuneContext<Mem, Reg> {
         RuneContext {
             ip: ip.unwrap_or(0),
             mem: mem,
-            regfile: regfile,
+            regstore: regstore,
             solver: solver,
             e_old: None,
             e_cur: None,
@@ -453,6 +243,8 @@ impl RuneContext {
     }
 }
 
+
+/*
 #[cfg(test)]
 mod test {
     use super::*;
@@ -667,3 +459,4 @@ mod test {
         ctx.reg_read("asassa");
     }
 }
+*/

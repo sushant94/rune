@@ -1,9 +1,17 @@
 //! Utilities and other miscellaneous functions for `RuneContext`
 
+use r2pipe::r2::R2;
 use r2api::structs::LRegInfo;
+use r2api::api_trait::R2Api;
 
-use context::rune_ctx::{RuneContext, RuneMemory, RuneRegFile};
+use context::rune_ctx::RuneContext;
 use context::context::{ContextAPI};
+
+use memory::memory::Memory;
+use memory::qword_mem::QWordMemory;
+
+use regstore::regstore::RegStore;
+use regstore::regfile::RuneRegFile;
 
 use libsmt::backends::smtlib2::SMTLib2;
 use libsmt::logics::qf_abv;
@@ -91,19 +99,28 @@ pub fn convert_to_u64<T: AsRef<str>>(s: T) -> Option<u64> {
 pub fn new_ctx(ip: Option<u64>,
                syms: &Option<Vec<Key>>,
                consts: &Option<Vec<(Key, u64)>>,
-               mut lreginfo: &mut LRegInfo)
-               -> RuneContext {
+               mut r2: &mut R2)
+               -> RuneContext<QWordMemory, RuneRegFile> {
+
+    // TODO: Use entire arch information for creating suitable context later.
+
+    let mut lreginfo = r2.reg_info().unwrap();
     let rregfile = RuneRegFile::new(&mut lreginfo);
 
-    let mut rmem = RuneMemory::new();
+    let bin = r2.bin_info().unwrap().bin.unwrap();
+    let bits = bin.bits.unwrap();
+    let endian = bin.endian.unwrap();
+    let mut rmem = QWordMemory::new(bits, endian);
+
     let mut smt = SMTLib2::new(Some(qf_abv::QF_ABV));
     rmem.init_memory(&mut smt);
+
     let mut ctx = RuneContext::new(ip, rmem, rregfile, smt);
 
     if let Some(ref sym_vars) = *syms {
         for var in sym_vars {
             let  _ = match *var {
-                Key::Mem(addr) => ctx.set_mem_as_sym(addr, 64),
+                Key::Mem(addr) => ctx.set_mem_as_sym(addr as u64, 64),
                 Key::Reg(ref reg) => ctx.set_reg_as_sym(reg),
             };
         }
@@ -112,7 +129,7 @@ pub fn new_ctx(ip: Option<u64>,
     if let Some(ref const_var) = *consts {
         for &(ref k, v) in const_var.iter() {
             let _ = match *k {
-                Key::Mem(addr) => ctx.set_mem_as_const(addr, v, 64),
+                Key::Mem(addr) => ctx.set_mem_as_const(addr as u64, v, 64),
                 Key::Reg(ref reg) => ctx.set_reg_as_const(reg, v),
             };
         }

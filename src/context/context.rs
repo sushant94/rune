@@ -10,9 +10,9 @@ use libsmt::backends::smtlib2::SMTProc;
 pub trait Context: Clone + Debug
                    + RegisterRead
                    + RegisterWrite<VarRef=<Self as RegisterRead>::VarRef>
+                   + Evaluate<VarRef=<Self as RegisterRead>::VarRef>
                    + MemoryRead<VarRef=<Self as RegisterRead>::VarRef>
                    + MemoryWrite<VarRef=<Self as RegisterRead>::VarRef>
-                   + Evaluate<VarRef=<Self as RegisterRead>::VarRef>
 {
     fn ip(&self) -> u64;
     fn is_symbolic(&self) -> bool {
@@ -35,6 +35,16 @@ pub trait Context: Clone + Debug
     fn set_e_cur(&mut self, <Self as RegisterRead>::VarRef);
 }
 
+pub trait MemoryRead: Sized {
+    type VarRef: Clone + Debug + Hash + Eq;
+    fn mem_read(&mut self, Self::VarRef, usize) -> Self::VarRef;
+}
+
+pub trait MemoryWrite: Sized {
+    type VarRef: Clone + Debug + Hash + Eq;
+    fn mem_write(&mut self, Self::VarRef, Self::VarRef, usize);
+}
+
 pub trait RegisterRead: Sized {
     type VarRef: Clone + Debug + Hash + Eq;
     fn reg_read<T: AsRef<str>>(&mut self, T) -> Self::VarRef;
@@ -43,16 +53,6 @@ pub trait RegisterRead: Sized {
 pub trait RegisterWrite: Sized {
     type VarRef: Clone + Debug + Hash + Eq;
     fn reg_write<T: AsRef<str>>(&mut self, T, Self::VarRef);
-}
-
-pub trait MemoryRead: Sized {
-    type VarRef: Clone + Debug + Hash + Eq;
-    fn mem_read(&mut self, Self::VarRef, u64) -> Self::VarRef;
-}
-
-pub trait MemoryWrite: Sized {
-    type VarRef: Clone + Debug + Hash + Eq;
-    fn mem_write(&mut self, Self::VarRef, Self::VarRef, u64);
 }
 
 pub trait Evaluate {
@@ -74,8 +74,8 @@ pub trait ContextAPI: Context {
     fn set_reg_as_sym<T: AsRef<str>>(&mut self, T) -> <Self as RegisterRead>::VarRef;
 
     /// Set memory to hold either symbolic or concrete values.
-    fn set_mem_as_const(&mut self, usize, u64, u64) -> <Self as RegisterRead>::VarRef;
-    fn set_mem_as_sym(&mut self, usize, u64) -> <Self as RegisterRead>::VarRef;
+    fn set_mem_as_const(&mut self, u64, u64, usize) -> <Self as RegisterRead>::VarRef;
+    fn set_mem_as_sym(&mut self, u64, usize) -> <Self as RegisterRead>::VarRef;
 
     /// Set registers that are not set to be a constant zero.
     fn zero_registers(&mut self);

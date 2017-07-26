@@ -8,6 +8,8 @@ use explorer::explorer::PathExplorer;
 use engine::rune::RuneControl;
 use context::context::{Context, Evaluate, RegisterRead};
 use context::rune_ctx::RuneContext;
+use memory::qword_mem::QWordMemory;
+use regstore::regfile::RuneRegFile;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[allow(dead_code)]
@@ -40,11 +42,11 @@ pub struct DFSExplorer<Ctx: Context> {
 
 // TODO: [X] Add constraints for T/F branch
 //       [ ] Check if the paths are feasible before enqueue
-impl PathExplorer for DFSExplorer<RuneContext> {
+impl PathExplorer for DFSExplorer<RuneContext<QWordMemory, RuneRegFile>> {
     type C = RuneControl;
-    type Ctx = RuneContext;
+    type Ctx = RuneContext<QWordMemory, RuneRegFile>;
 
-    fn new() -> DFSExplorer<RuneContext> {
+    fn new() -> DFSExplorer<Self::Ctx> {
         DFSExplorer { queue: VecDeque::new() }
     }
 

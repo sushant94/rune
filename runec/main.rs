@@ -16,8 +16,8 @@ mod console;
 use std::process::exit;
 use docopt::Docopt;
 
-use rune::context::utils::{Key, ValType, SAssignment};
-use rune::context::rune_ctx::RInitialState;
+use rune::utils::utils::{Key, ValType, SAssignment};
+use rune::utils::state::RInitialState;
 use rune::explorer::explorer::PathExplorer;
 use rune::explorer::interactive::Command;
 use rune::engine::rune::Rune;
@@ -79,7 +79,7 @@ fn main() {
                 let mut explorer = InteractiveExplorer::new();
                 explorer.bp = is.get_breakpoints();
 
-                let ctx = is.create_context(&mut lreginfo);
+                let ctx = is.create_context(&mut stream);
 
                 let mut rune = Rune::new(ctx, explorer, stream);
                 rune.run().expect("Rune Error!");

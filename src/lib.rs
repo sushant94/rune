@@ -21,7 +21,21 @@ extern crate serde_json;
 pub mod context {
     pub mod context;
     pub mod rune_ctx;
+}
+
+pub mod utils {
     pub mod utils;
+    pub mod state;
+}
+
+pub mod memory {
+    pub mod memory;
+    pub mod qword_mem;
+}
+
+pub mod regstore {
+    pub mod regstore;
+    pub mod regfile;
 }
 
 pub mod explorer {
