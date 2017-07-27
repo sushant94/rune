@@ -142,7 +142,7 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
             }
             Token::EPoke(size) => {
                 self.ctx.mem_write(l_op.unwrap(), r_op.unwrap(), size as usize);
-                return Ok(None);
+                return Ok(None)
             }
             Token::ENop => return Ok(None),
             _ => {}
@@ -154,10 +154,8 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
             }
             Token::ECmp | Token::ELt | Token::EGt => {
                 // This case is a bit different as we want the result to be a bitvector rather
-                // than
-                // a bool. Hence we adopt the following stratergy:
+                // than a bool. Hence we adopt the following stratergy:
                 // (ite (= lhs rhs) (_ bv1 64) (_ bv0 64))
-                // FIXME: Set esil_old and esil_cur
                 let e_cur = self.ctx.eval(bitvec::OpCodes::BvSub,
                                           vec![l_op.as_ref().unwrap().clone(),
                                                r_op.as_ref().unwrap().clone()]);

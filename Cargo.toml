@@ -22,7 +22,8 @@ serde_derive = "*"
 serde_json = "*"
 
 [dependencies.libsmt]
-git = "https://github.com/sushant94/libsmt.rs"
+# git = "https://github.com/sushant94/libsmt.rs"
+path = "../libsmt-rs"
 
 [dependencies.radeco-lib]
 git = "https://github.com/radare/radeco-lib"

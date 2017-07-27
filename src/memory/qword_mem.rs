@@ -63,10 +63,10 @@ impl Memory for QWordMemory {
                  data: NodeIndex,
                  write_size: usize,
                  solver: &mut SMTLib2<qf_abv::QF_ABV>) {
-
         if self.map.is_none() {
             self.init_memory(solver);
         }
+
         let mem = self.map.unwrap();
         let new_mem = solver.assert(array_ex::OpCodes::Store, &[mem, addr, data]);
         self.map = Some(new_mem);

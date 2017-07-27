@@ -31,6 +31,7 @@ pub mod utils {
 pub mod memory {
     pub mod memory;
     pub mod qword_mem;
+    pub mod seg_mem;
 }
 
 pub mod regstore {

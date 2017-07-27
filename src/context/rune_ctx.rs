@@ -185,24 +185,25 @@ where Mem: Memory<VarRef=NodeIndex>,
     }
 
     fn set_mem_as_const(&mut self, addr: u64, val: u64, write_size: usize) -> NodeIndex {
-        let cval = self.define_const(val, write_size);
+        // Assert that memory var is in chunks of 8
+        assert_eq!(write_size%8, 0, "Write size is not divisible by 8!");
+
         let addr = self.define_const(addr, 64);
-        
-        // (MAJOR) TODO
-        if write_size < 64 {
-            unimplemented!();
-        } else {
-            self.mem_write(addr, cval, 64);
-        }
+
+        let cval = self.define_const(val, write_size);
+        self.mem_write(addr, cval, write_size);
+
         cval
     }
 
     fn set_mem_as_sym(&mut self, addr: u64, write_size: usize) -> NodeIndex {
-        assert_eq!(write_size, 64, "TODO: Unimplemented set_mem for size < 64!");
+        // Assert that memory var is in chunks of 8
+        assert_eq!(write_size%8, 0, "Write_size is not divisible by 8!");
 
-        let key = format!("mem_{}", addr);
+        let key = format!("mem_{}_{}", addr, write_size);
         let sym = self.solver.new_var(Some(&key), qf_abv::bv_sort(64));
-        let addr = self.define_const(addr as u64, 64);
+        let addr = self.define_const(addr, 64);
+
         self.mem_write(addr, sym, write_size);
         self.syms.insert(key, sym);
         sym
@@ -244,13 +245,10 @@ where Mem: Memory,
 }
 
 
-/*
-#[cfg(test)]
 mod test {
     use super::*;
     use context::context::{Context, ContextAPI, Evaluate, MemoryRead, MemoryWrite, RegisterRead,
                            RegisterWrite};
-    use context::utils;
 
     use libsmt::logics::qf_abv;
     use libsmt::backends::smtlib2::SMTLib2;
@@ -258,6 +256,25 @@ mod test {
     use libsmt::theories::{bitvec, core};
     use libsmt::backends::z3;
 
+    use memory::seg_mem::SegMem;
+    use regstore::regfile::RuneRegFile;
+
+    use r2api::structs::Endian;
+
+    #[test]
+    fn teting_memory_my_dude() {
+        let mut lreginfo = Default::default();
+        let regstore = RuneRegFile::new(&mut lreginfo);
+
+        let mut mem = SegMem::new(64, Endian::Big);
+		let mut smt = SMTLib2::new(Some(qf_abv::QF_ABV));
+		mem.init_memory(&mut smt);
+
+        let mut ctx = RuneContext::new(Some(0x9000), mem, regstore, smt);
+    }
+}
+
+    /*
     #[test]
     fn ctx_reg_write() {
         let mut lreginfo = Default::default();
