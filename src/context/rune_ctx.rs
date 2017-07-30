@@ -186,7 +186,7 @@ where Mem: Memory<VarRef=NodeIndex>,
 
     fn set_mem_as_const(&mut self, addr: u64, val: u64, write_size: usize) -> NodeIndex {
         // Assert that memory var is in chunks of 8
-        assert_eq!(write_size%8, 0, "Write size is not divisible by 8!");
+        // assert_eq!(write_size%8, 0, "Write size is not divisible by 8!");
 
         let addr = self.define_const(addr, 64);
 
@@ -198,7 +198,7 @@ where Mem: Memory<VarRef=NodeIndex>,
 
     fn set_mem_as_sym(&mut self, addr: u64, write_size: usize) -> NodeIndex {
         // Assert that memory var is in chunks of 8
-        assert_eq!(write_size%8, 0, "Write_size is not divisible by 8!");
+        // assert_eq!(write_size%8, 0, "Write_size is not divisible by 8!");
 
         let key = format!("mem_{}_{}", addr, write_size);
         let sym = self.solver.new_var(Some(&key), qf_abv::bv_sort(64));
@@ -261,7 +261,7 @@ mod test {
 
     use r2api::structs::Endian;
 
-    #[test]
+//    #[test]
     fn teting_memory_my_dude() {
         let mut lreginfo = Default::default();
         let regstore = RuneRegFile::new(&mut lreginfo);
