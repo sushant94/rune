@@ -9,7 +9,7 @@ use libsmt::backends::smtlib2::{SMTLib2, SMTProc};
 use libsmt::backends::backend::SMTBackend;
 use libsmt::logics::qf_abv;
 use libsmt::logics::qf_abv::QF_ABV_Fn::BVOps;
-use libsmt::theories::bitvec::OpCodes::Const;
+use libsmt::theories::bitvec::OpCodes::*;
 use libsmt::theories::{integer, array_ex, bitvec, core};
 use r2api::structs::Endian;
 
@@ -33,14 +33,11 @@ impl MemRange {
         (self.end - self.start) as usize
     }
 
-    fn get_overlap(&self, other: MemRange) -> Option<RangeCondition> {
-        if self.start < other.start && self.end > other.start && self.end < other.end {
-            Some(RangeCondition::Contained(other, other.start, self.end))
-        } else if self.start > other.start && self.end < other.end {
-            Some(RangeCondition::Full(other))
-        } else if self.start < other.end && self.end > other.end {
-            Some(RangeCondition::Contained(other, self.start, other.start))
+    fn contains(&self, num: u64) -> bool {
+        if num >= self.start && num < self.end {
+            true
         } else {
+            false
         }
     }
 }
@@ -96,48 +93,34 @@ pub struct SegMem {
     endian: Endian,
     segments: BTreeMap<MemRange, MemBlock>,
 }
-// A function which ->
-// Given a vec of ranges and a range gives:
-// vec of results which specify different parts of the given range lie in different segments
-#[derive(Clone, Debug, Copy)]
-pub enum RangeCondition {
-    Full(MemRange),
-    Contained(MemRange, u64, u64),
-    Free(u64, u64),
-}
 
 impl SegMem {
-    fn get_range_conditions(&self, read_range: MemRange) -> Option<Vec<RangeCondition>> {
-        let mem = self.segments.clone();
-        let ranges: Vec<MemRange> = mem.keys().cloned().collect();
+    fn read_segment(&mut self, READ: u64, start: u64, end: u64, low: u64, high: u64, width: u64, e_mem: Option<NodeIndex>, solver: &mut SMTLib2<qf_abv::QF_ABV>) -> NodeIndex {
+        let ext = width - (high - low); 
+        let shift = width - (READ + (high - low));
 
-        let mut pos = match ranges.binary_search(&&read_range) {
-            Ok(0) | Err(0) => 0,
-            Ok(pos) | Err(pos) => pos - 1,
-        };
+        if let Some(mem) = e_mem {
+            let int1 = solver.assert(Extract(low, high), &[mem]);
+            let int2 = solver.assert(ZeroExtend(ext), &[int1]);
+            let int3 = solver.assert(BvShl, &[int1, int2]);
 
-        let mut conditions = Vec::new();
+            int3
+        } else {
+            let size = high - low;
+            let key = format!("mem_{}_{}", start, size);
+            let int1 = solver.new_var(Some(&key), qf_abv::bv_sort(size as usize));
 
-        let mut overlap = Some(RangeCondition::Free(0, 0));
-        let mut other: MemRange;
+            let int2 = solver.assert(ZeroExtend(ext), &[int1]);
+            let int3 = solver.new_const(Const(shift, width as usize));
+            let int4 = solver.assert(BvShl, &[int2, int3]);
+            
+            let r = MemRange::new(start, end);
+            let m = MemBlock::new(r, Some(int1));
 
-        println!("{:?}", ranges);
+            self.segments.insert(r, m);
 
-        if ranges.is_empty() {
-            conditions.push(RangeCondition::Free(read_range.start, read_range.end));
-        } else { 
-            while overlap.is_some() {
-                other = ranges[pos];
-                overlap = read_range.get_overlap(other);
-                if overlap.is_some() {
-                    conditions.push(overlap.unwrap());
-                }
-                pos += 1;
-                println!("{:?}", overlap);
-            }
+            int4
         }
-
-        Some(conditions)
     }
 }
 
@@ -163,59 +146,98 @@ impl Memory for SegMem {
             _ => panic!("Reading from invalid addr!")
         };
 
-        let mut segments = self.segments.clone();
-
         let read_range = MemRange::new(addr, addr+read_size as u64);
-        let conditions = self.get_range_conditions(read_range).unwrap();
 
-        println!("{:?}", conditions);
+        let mem = self.segments.clone();
+        let mut ranges: Vec<MemRange> = mem.keys().cloned().collect();
 
-        let mut result = solver.new_const(bitvec::OpCodes::Const(0, read_range.get_width()));
+        let mut pos = match ranges.binary_search(&&read_range) {
+            Ok(0) | Err(0) => 0,
+            Ok(pos) | Err(pos) => pos - 1,
+        };
 
-        for cond in &conditions {
-            match *cond {
-                RangeCondition::Free(x, y) => {
-                    let key = format!("mem_{}_{}", x, y-x);
-                    let new_var = solver.new_var(Some(&key), qf_abv::bv_sort((y-x) as usize));
+        let mut iterator = ranges.split_at(pos).1.iter().peekable();
 
-                    let m_range = MemRange::new(x, y);
-                    segments.insert(m_range, MemBlock::new(m_range, Some(new_var)));
-                },
-                RangeCondition::Full(x) => {
-                },
-                RangeCondition::Contained(r, x, y) => {
-                },
-                RangeCondition::Contained(r, x, y) => {
-                },
+        let mut low: u64;
+        let mut high: u64;
+
+        let width = read_range.get_width() as u64;
+        let START = read_range.start;
+        let END = read_range.end;
+
+        let mut ptr = START;
+        let mut cov = 0;
+
+        println!("{} {}", START, END);
+
+        let mut result = solver.new_const(Const(0, width as usize));
+
+        while ptr != END {
+            cov = ptr - START;
+
+            if let Some(&current) = iterator.peek() {
+                if current.contains(ptr) && current.contains(END) {
+                    // extract entire from current
+                    println!("extracting entire from {:?}", current);
+                    let node = mem.get(&current).unwrap();
+                    let node_idx = node.solver_idx.unwrap();
+
+                    low = ptr - current.start;
+                    high = END - current.start;
+
+                    let int = self.read_segment(cov, ptr, END, low, high, width, Some(node_idx), solver);
+                    result = solver.assert(BvOr, &[result, int]);
+
+                    ptr = END;
+                } else if current.contains(ptr) && !current.contains(END) {
+                    // extract till end of current
+                    println!("extracting till end of {:?}", current);
+                    let node = mem.get(&current).unwrap();
+                    let node_idx = node.solver_idx.unwrap();
+
+                    low = ptr - current.start;
+                    high = current.end - current.start;
+
+                    let int = self.read_segment(cov, ptr, current.end, low, high, width, Some(node_idx), solver);
+                    result = solver.assert(BvOr, &[result, int]);
+
+                    ptr = current.end;
+                    iterator.next();
+                } else if current.start < END && current.end >= END {
+                    // create free var till current.start
+                    println!("free var till {}", current.start);
+                    low = 0;
+                    high = current.start - ptr;
+                    
+                    let int = self.read_segment(cov, ptr, current.start, low, high, width, None, solver);
+                    result = solver.assert(BvOr, &[result, int]);
+                    
+                    ptr = current.start;
+                } else {
+                    // create free var till end
+                    println!("free var till {}", END);
+                    low = 0;
+                    high = END - ptr;
+                    
+                    let int = self.read_segment(cov, ptr, END, low, high, width, None, solver);
+                    result = solver.assert(BvOr, &[result, int]);
+
+                    ptr = END;
+                }
+            } else {
+                // create free var till end
+                println!("free var till {}", END);
+                low = 0;
+                high = END - ptr;
+                
+                let int = self.read_segment(cov, ptr, END, low, high, width, None, solver);
+                result = solver.assert(BvOr, &[result, int]);
+
+                ptr = END;
             }
         }
 
-        self.segments = segments;
         result
-        /*
-
-        let read_range = MemRange { start: addr, end: addr + read_size as u64 };
-        let mut mem_block = MemBlock { range: read_range, solver_idx: None };
-
-        match mem.binary_search(&mem_block) {
-            Ok(pos) => {
-                // Assume it lies completely inside
-                let current_block = mem.get(pos);
-                let low = read_range.start - current_block.range.start;
-                let high = read_range.end - current_block.range.start;
-
-                solver.assert(bitvec::OpCodes::Extract(high - 1, low), &[current_block.solver_idx])
-            },
-            Err(pos) => {
-                let bv_array = qf_abv::bv_sort(read_size);
-                let node = solver.new_var(Some(format!("mem_{}_{}", addr, read_size)), bv_array);
-                mem_block.solver_idx = Some(node));
-                mem.insert(mem_block);
-
-                node
-            }
-        }
-        */
     }
 
     /*
@@ -264,14 +286,15 @@ mod test {
         let block = mem.read(addr, 100, &mut solver);
         println!("{}", solver.generate_asserts());
         println!("------------------");
-        let addr2 = solver.new_const(bitvec::OpCodes::Const(200, 64));
+        let addr2 = solver.new_const(bitvec::OpCodes::Const(300, 64));
         let block2 = mem.read(addr2, 100, &mut solver);
         println!("{}", solver.generate_asserts());
         println!("------------------");
         let addr3 = solver.new_const(bitvec::OpCodes::Const(150, 64));
-        let block3 = mem.read(addr3, 100, &mut solver);
+        let block3 = mem.read(addr3, 200, &mut solver);
         println!("{}", solver.generate_asserts());
         println!("------------------");
+        panic!("ZZ")
         /*
         let data = solver.new_const(bitvec::OpCodes::Const(24, 32));
         mem.write(addr, data, 32, &mut solver);
