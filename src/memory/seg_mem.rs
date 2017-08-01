@@ -10,7 +10,9 @@ use libsmt::backends::backend::SMTBackend;
 use libsmt::logics::qf_abv;
 use libsmt::logics::qf_abv::QF_ABV_Fn::BVOps;
 use libsmt::theories::bitvec::OpCodes::*;
+use libsmt::theories::core::OpCodes::*;
 use libsmt::theories::{integer, array_ex, bitvec, core};
+use libsmt::backends::z3::Z3;
 use r2api::structs::Endian;
 
 use memory::memory::Memory;
@@ -30,7 +32,7 @@ impl MemRange {
     }
 
     fn get_width(&self) -> usize {
-        (self.end - self.start) as usize
+        (self.end - self.start) as usize * 8
     }
 
     fn contains(&self, num: u64) -> bool {
@@ -95,21 +97,22 @@ pub struct SegMem {
 }
 
 impl SegMem {
-    fn read_segment(&mut self, READ: u64, start: u64, end: u64, low: u64, high: u64, width: u64, e_mem: Option<NodeIndex>, solver: &mut SMTLib2<qf_abv::QF_ABV>) -> NodeIndex {
-        let ext = width - (high - low); 
-        let shift = width - (READ + (high - low));
+    fn read_segment(&mut self, cov: u64, start: u64, end: u64, low: u64, high: u64, width: u64, e_mem: Option<NodeIndex>, solver: &mut SMTLib2<qf_abv::QF_ABV>) -> NodeIndex {
+        let shift = cov;
+        let ext   = width - (high - low);
 
         if let Some(mem) = e_mem {
-            let int1 = solver.assert(Extract(low, high), &[mem]);
+            let int1 = solver.assert(Extract(high - 1, low), &[mem]);
             let int2 = solver.assert(ZeroExtend(ext), &[int1]);
-            let int3 = solver.assert(BvShl, &[int1, int2]);
+            let int3 = solver.new_const(Const(shift, width as usize));
+            let int4 = solver.assert(BvShl, &[int2, int3]);
 
-            int3
+            int4
         } else {
             let size = high - low;
-            let key = format!("mem_{}_{}", start, size);
-            let int1 = solver.new_var(Some(&key), qf_abv::bv_sort(size as usize));
+            let key = format!("mem_{}_{}", start, size/8);
 
+            let int1 = solver.new_var(Some(&key), qf_abv::bv_sort(size as usize));
             let int2 = solver.assert(ZeroExtend(ext), &[int1]);
             let int3 = solver.new_const(Const(shift, width as usize));
             let int4 = solver.assert(BvShl, &[int2, int3]);
@@ -146,7 +149,7 @@ impl Memory for SegMem {
             _ => panic!("Reading from invalid addr!")
         };
 
-        let read_range = MemRange::new(addr, addr+read_size as u64);
+        let read_range = MemRange::new(addr, addr+(read_size/8) as u64);
 
         let mem = self.segments.clone();
         let mut ranges: Vec<MemRange> = mem.keys().cloned().collect();
@@ -158,120 +161,93 @@ impl Memory for SegMem {
 
         let mut iterator = ranges.split_at(pos).1.iter().peekable();
 
-        let mut low: u64;
-        let mut high: u64;
-
         let width = read_range.get_width() as u64;
         let START = read_range.start;
-        let END = read_range.end;
+        let END   = read_range.end;
+
+        let mut low:  u64;
+        let mut high: u64;
+
+        let mut result = solver.new_const(Const(0, width as usize));
 
         let mut ptr = START;
         let mut cov = 0;
 
-        println!("{} {}", START, END);
-
-        let mut result = solver.new_const(Const(0, width as usize));
-
         while ptr != END {
-            cov = ptr - START;
-
+            cov = (ptr - START)*8;
             if let Some(&current) = iterator.peek() {
                 if current.contains(ptr) && current.contains(END) {
-                    // extract entire from current
-                    println!("extracting entire from {:?}", current);
-                    let node = mem.get(&current).unwrap();
+                    // extract entire
+                    let node     = mem.get(&current).unwrap();
                     let node_idx = node.solver_idx.unwrap();
 
-                    low = ptr - current.start;
-                    high = END - current.start;
+                    low  = (ptr - current.start)*8;
+                    high = (END - current.start)*8;
 
-                    let int = self.read_segment(cov, ptr, END, low, high, width, Some(node_idx), solver);
-                    result = solver.assert(BvOr, &[result, int]);
+                    let int = self.read_segment(cov, ptr, END,
+                                                low, high, width,
+                                                Some(node_idx), solver);
+                    result  = solver.assert(BvOr, &[result, int]);
 
                     ptr = END;
+                    iterator.next();
                 } else if current.contains(ptr) && !current.contains(END) {
                     // extract till end of current
-                    println!("extracting till end of {:?}", current);
-                    let node = mem.get(&current).unwrap();
+                    let node     = mem.get(&current).unwrap();
                     let node_idx = node.solver_idx.unwrap();
 
-                    low = ptr - current.start;
-                    high = current.end - current.start;
+                    low  = (ptr - current.start)*8;
+                    high = (current.end - current.start)*8;
 
-                    let int = self.read_segment(cov, ptr, current.end, low, high, width, Some(node_idx), solver);
-                    result = solver.assert(BvOr, &[result, int]);
+                    let int = self.read_segment(cov, ptr, current.end,
+                                                low, high, width,
+                                                Some(node_idx), solver);
+                    result  = solver.assert(BvOr, &[result, int]);
 
                     ptr = current.end;
                     iterator.next();
                 } else if current.start < END && current.end >= END {
                     // create free var till current.start
-                    println!("free var till {}", current.start);
-                    low = 0;
-                    high = current.start - ptr;
+                    low  = 0;
+                    high = (current.start - ptr)*8;
                     
-                    let int = self.read_segment(cov, ptr, current.start, low, high, width, None, solver);
-                    result = solver.assert(BvOr, &[result, int]);
-                    
+                    let int = self.read_segment(cov, ptr, current.start,
+                                                low, high, width,
+                                                None, solver);
+                    result  = solver.assert(BvOr, &[result, int]);
+
                     ptr = current.start;
                 } else {
                     // create free var till end
-                    println!("free var till {}", END);
-                    low = 0;
-                    high = END - ptr;
-                    
-                    let int = self.read_segment(cov, ptr, END, low, high, width, None, solver);
-                    result = solver.assert(BvOr, &[result, int]);
+                    low  = 0;
+                    high = (END - ptr)*8;
+
+                    let int = self.read_segment(cov, ptr, END,
+                                                low, high, width,
+                                                None, solver);
+                    result  = solver.assert(BvOr, &[result, int]);
 
                     ptr = END;
                 }
             } else {
                 // create free var till end
-                println!("free var till {}", END);
-                low = 0;
-                high = END - ptr;
-                
-                let int = self.read_segment(cov, ptr, END, low, high, width, None, solver);
-                result = solver.assert(BvOr, &[result, int]);
+                low  = 0;
+                high = (END - ptr)*8;
+
+                let int = self.read_segment(cov, ptr, END,
+                                            low, high, width,
+                                            None, solver);
+                result  = solver.assert(BvOr, &[result, int]);
 
                 ptr = END;
             }
         }
-
         result
     }
 
-    /*
-     * Algorithm
-     * Check if node already present
-     * If not, create -> Create intermediary nodes
-     */
     fn write(&mut self, addr: NodeIndex, data: NodeIndex, write_size: usize, solver: &mut SMTLib2<qf_abv::QF_ABV>) {
-        /*
-        // Check if memory is initialized
-        if self.roots.is_none() {
-            self.init_memory();
-        }
-
-        // Assert that address is valid
-        let addr = match solver.get_node_info(addr) {
-            &BVOps(Const(x, _)) => x,
-            _ => panic!("Reading from invalid addr")
-        };
-
-        let mut mem = self.roots.unwrap();
-
-        let write_range = MemRange { start: addr, end: addr + write_size as u64 };
-        let mut mem_block = MemBlock { range: write_range, solver_idx: None };
-
-        match mem.binary_search(&mem_block) {
-            Ok(pos) => {
-
-            },
-            Err(pos) => {
-                panic!(
-            }
-        }
-        */
+        let idx = self.read(addr, write_size, solver);
+        solver.assert(Cmp, &[idx, data]);
     }
 }
 
@@ -280,25 +256,28 @@ mod test {
 
     #[test]
     fn check_read() {
+        let mut z3: Z3 = Default::default(); 
         let mut solver = SMTLib2::new(Some(qf_abv::QF_ABV));
-        let addr = solver.new_const(bitvec::OpCodes::Const(100, 64));
         let mut mem = SegMem::new(64, Endian::Big);
-        let block = mem.read(addr, 100, &mut solver);
+
+        let addr = solver.new_const(Const(0x9000, 64));
+        let data = solver.new_const(Const(0x70, 8));
+        mem.write(addr, data, 8, &mut solver);
+
+        let addr = solver.new_const(Const(0x9001, 64));
+        let data = solver.new_const(Const(0x79, 8));
+        mem.write(addr, data, 8, &mut solver);
+
+        let addr = solver.new_const(Const(0x9000, 64));
+        let var  = mem.read(addr, 16, &mut solver);
+
+        let c   = solver.new_const(Const(0x7970, 16));
+        let cmp = solver.assert(Cmp, &[var, c]);
+        
         println!("{}", solver.generate_asserts());
-        println!("------------------");
-        let addr2 = solver.new_const(bitvec::OpCodes::Const(300, 64));
-        let block2 = mem.read(addr2, 100, &mut solver);
-        println!("{}", solver.generate_asserts());
-        println!("------------------");
-        let addr3 = solver.new_const(bitvec::OpCodes::Const(150, 64));
-        let block3 = mem.read(addr3, 200, &mut solver);
-        println!("{}", solver.generate_asserts());
-        println!("------------------");
-        panic!("ZZ")
-        /*
-        let data = solver.new_const(bitvec::OpCodes::Const(24, 32));
-        mem.write(addr, data, 32, &mut solver);
-        println!("{}", solver.generate_asserts());
-        */
+
+        panic!("ZZ");
     }
 }
+
+

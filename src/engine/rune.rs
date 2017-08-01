@@ -141,7 +141,7 @@ where Ctx: Context<IFn=qf_abv::QF_ABV_Fn>,
                 return Ok(None);
             }
             Token::EPoke(size) => {
-                self.ctx.mem_write(l_op.unwrap(), r_op.unwrap(), size as usize);
+                self.ctx.mem_write(l_op.unwrap(), r_op.unwrap(), (size*8) as usize);
                 return Ok(None)
             }
             Token::ENop => return Ok(None),

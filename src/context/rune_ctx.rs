@@ -127,6 +127,8 @@ where Mem: Memory<VarRef=NodeIndex>,
     type VarRef = NodeIndex;
     
     fn mem_read(&mut self, addr: NodeIndex, read_size: usize) -> NodeIndex {
+        // Assert read size is multiple of 8
+        assert_eq!(read_size%8, 0, "Read Size is not divisible by 8");
         self.mem.read(addr, read_size, &mut self.solver)
     }
 }
@@ -138,6 +140,8 @@ where Mem: Memory<VarRef=NodeIndex>,
     type VarRef = NodeIndex;
 
     fn mem_write(&mut self, addr: NodeIndex, data: NodeIndex, write_size: usize) {
+        // Assert write size is multiple of 8
+        assert_eq!(write_size%8, 0, "Write Size is not divisible by 8");
         self.mem.write(addr, data, write_size, &mut self.solver);
     }
 }
@@ -186,10 +190,9 @@ where Mem: Memory<VarRef=NodeIndex>,
 
     fn set_mem_as_const(&mut self, addr: u64, val: u64, write_size: usize) -> NodeIndex {
         // Assert that memory var is in chunks of 8
-        // assert_eq!(write_size%8, 0, "Write size is not divisible by 8!");
+        assert_eq!(write_size%8, 0, "Write size is not divisible by 8!");
 
         let addr = self.define_const(addr, 64);
-
         let cval = self.define_const(val, write_size);
         self.mem_write(addr, cval, write_size);
 
@@ -198,10 +201,10 @@ where Mem: Memory<VarRef=NodeIndex>,
 
     fn set_mem_as_sym(&mut self, addr: u64, write_size: usize) -> NodeIndex {
         // Assert that memory var is in chunks of 8
-        // assert_eq!(write_size%8, 0, "Write_size is not divisible by 8!");
+        assert_eq!(write_size%8, 0, "Write size is not divisible by 8!");
 
         let key = format!("mem_{}_{}", addr, write_size);
-        let sym = self.solver.new_var(Some(&key), qf_abv::bv_sort(64));
+        let sym = self.solver.new_var(Some(&key), qf_abv::bv_sort(write_size));
         let addr = self.define_const(addr, 64);
 
         self.mem_write(addr, sym, write_size);
