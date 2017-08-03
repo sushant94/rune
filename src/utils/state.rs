@@ -5,11 +5,12 @@ use r2api::structs::LRegInfo;
 use std::collections::HashMap;
 
 use serde_json::{to_string, from_reader};
-use utils::utils::{Key, new_ctx};
+use utils::utils::{Key, new_rune_ctx};
 
 use context::context::Context;
 use context::rune_ctx::RuneContext;
 use memory::qword_mem::QWordMemory;
+use memory::seg_mem::SegMem;
 use regstore::regfile::RuneRegFile;
 
 use r2pipe::r2::R2;
@@ -20,8 +21,8 @@ pub struct RInitialState {
     start_addr: Option<u64>,
     // end_addr: Option<u64>,
     breakpoints: Option<Vec<u64>>,
-    constants: Option<Vec<(Key, u64)>>,
-    sym_vars: Option<Vec<Key>>,
+    sym_vars: Option<HashMap<Key, u64>>,
+    constants: Option<HashMap<Key, (u64, u64)>>,
     env_vars: Option<HashMap<String, String>>,
 }
 
@@ -60,14 +61,16 @@ impl RInitialState {
     }
 
     pub fn add_const(&mut self, const_val: (Key, u64)) {
+        // FIXME
         if let Some(ref mut constants) = self.constants {
-            constants.push(const_val);
+            constants.insert(const_val.0, (const_val.1, 64));
         }
     }
 
     pub fn add_sym(&mut self, sym_val: Key) {
+        // Assume when we set memory as sym, we set one byte
         if let Some(ref mut sym_vars) = self.sym_vars {
-            sym_vars.push(sym_val);
+            sym_vars.insert(sym_val, 8);
         }
     }
 
@@ -83,10 +86,9 @@ impl RInitialState {
         from_reader(file).unwrap()
     }
 
-    // Fix this to be generic
-    pub fn create_context(&self, r2: &mut R2) -> RuneContext<QWordMemory, RuneRegFile>
+    pub fn create_context(&self, r2: &mut R2) -> RuneContext<SegMem, RuneRegFile>
     {
-        new_ctx(self.start_addr, &self.sym_vars, &self.constants, r2)
+        new_rune_ctx(self.start_addr, self.sym_vars.clone(), self.constants.clone(), r2)
     }
 }
 
@@ -96,8 +98,8 @@ impl Default for RInitialState {
             start_addr: Some(0x0000),
             // end_addr: Some(0x8000),
             breakpoints: Some(Vec::new()),
-            constants: Some(Vec::new()),
-            sym_vars: Some(Vec::new()),
+            constants: Some(HashMap::new()),
+            sym_vars: Some(HashMap::new()),
             env_vars: Some(HashMap::new()),
         }
     }

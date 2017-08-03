@@ -13,9 +13,11 @@ use libsmt::theories::bitvec::OpCodes::*;
 use libsmt::theories::core::OpCodes::*;
 use libsmt::theories::{integer, array_ex, bitvec, core};
 use libsmt::backends::z3::Z3;
+
 use r2api::structs::Endian;
 
 use memory::memory::Memory;
+use utils::utils::simplify_constant;
 
 #[derive(Copy, Clone, Debug)]
 pub struct MemRange {
@@ -113,16 +115,16 @@ impl SegMem {
             let key = format!("mem_{}_{}", start, size/8);
 
             let int1 = solver.new_var(Some(&key), qf_abv::bv_sort(size as usize));
-            let int2 = solver.assert(ZeroExtend(ext), &[int1]);
-            let int3 = solver.new_const(Const(shift, width as usize));
-            let int4 = solver.assert(BvShl, &[int2, int3]);
+            // let int2 = solver.assert(ZeroExtend(ext), &[int1]);
+            // let int3 = solver.new_const(Const(shift, width as usize));
+            // let int4 = solver.assert(BvShl, &[int2, int3]);
             
             let r = MemRange::new(start, end);
             let m = MemBlock::new(r, Some(int1));
 
             self.segments.insert(r, m);
 
-            int4
+            int1
         }
     }
 }
@@ -144,10 +146,7 @@ impl Memory for SegMem {
 
     fn read(&mut self, addr: NodeIndex, read_size: usize, solver: &mut SMTLib2<qf_abv::QF_ABV>) -> NodeIndex {
         // Assert that address is valid
-        let addr = match solver.get_node_info(addr) {
-            &BVOps(Const(x, _)) => x,
-            _ => panic!("Reading from invalid addr!")
-        };
+        let addr = simplify_constant(addr, solver);
 
         let read_range = MemRange::new(addr, addr+(read_size/8) as u64);
 
@@ -176,7 +175,24 @@ impl Memory for SegMem {
         while ptr != END {
             cov = (ptr - START)*8;
             if let Some(&current) = iterator.peek() {
-                if current.contains(ptr) && current.contains(END) {
+                if current.start == START && current.end == END {
+                    // current is the mem requested
+                    let node     = mem.get(&current).unwrap();
+                    let node_idx = node.solver_idx.unwrap();
+
+                    result = node_idx;
+
+                    ptr = END;
+                } else if current.start == ptr && current.end <= END {
+                    // Use current
+                    let node     = mem.get(&current).unwrap();
+                    let node_idx = node.solver_idx.unwrap();
+
+                    result = solver.assert(BvOr, &[result, node_idx]);
+
+                    ptr = current.end;
+                    iterator.next();
+                } else if current.contains(ptr) && current.contains(END) {
                     // extract entire
                     let node     = mem.get(&current).unwrap();
                     let node_idx = node.solver_idx.unwrap();
@@ -242,6 +258,7 @@ impl Memory for SegMem {
                 ptr = END;
             }
         }
+        println!("{}", solver.generate_asserts());
         result
     }
 

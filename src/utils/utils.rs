@@ -9,12 +9,20 @@ use context::context::{ContextAPI};
 
 use memory::memory::Memory;
 use memory::qword_mem::QWordMemory;
+use memory::seg_mem::SegMem;
 
 use regstore::regstore::RegStore;
 use regstore::regfile::RuneRegFile;
 
+use petgraph::graph::NodeIndex;
+
 use libsmt::backends::smtlib2::SMTLib2;
 use libsmt::logics::qf_abv;
+use libsmt::logics::qf_abv::QF_ABV_Fn::BVOps;
+use libsmt::theories::bitvec::OpCodes::*;
+use libsmt::theories::core::OpCodes::*;
+
+use std::collections::HashMap;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum ValType {
@@ -24,7 +32,7 @@ pub enum ValType {
     Unknown(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash)]
 pub enum Key {
     Mem(usize),
     Reg(String),
@@ -96,48 +104,76 @@ pub fn convert_to_u64<T: AsRef<str>>(s: T) -> Option<u64> {
     }
 }
 
-pub fn new_ctx(ip: Option<u64>,
-               syms: &Option<Vec<Key>>,
-               consts: &Option<Vec<(Key, u64)>>,
-               mut r2: &mut R2)
-               -> RuneContext<QWordMemory, RuneRegFile> {
-
-    // TODO: Use entire arch information for creating suitable context later.
+// This function needs to be updated to support arbitrary Ctx and mem sizes
+pub fn new_rune_ctx(
+    ip: Option<u64>,
+    syms: Option<HashMap<Key, u64>>,
+    consts: Option<HashMap<Key, (u64, u64)>>,
+    mut r2: &mut R2) -> RuneContext<SegMem, RuneRegFile> {
 
     let mut lreginfo = r2.reg_info().unwrap();
-    let rregfile = RuneRegFile::new(&mut lreginfo);
+    let rregfile     = RuneRegFile::new(&mut lreginfo);
 
-    let bin = r2.bin_info().unwrap().bin.unwrap();
-    let bits = bin.bits.unwrap();
-    let endian = bin.endian.unwrap();
-    let mut rmem = QWordMemory::new(bits, endian);
+    let bin      = r2.bin_info().unwrap().bin.unwrap();
+    let bits     = bin.bits.unwrap();
+    let endian   = bin.endian.unwrap();
+    let mut rmem = SegMem::new(bits, endian);
 
     let mut smt = SMTLib2::new(Some(qf_abv::QF_ABV));
-    rmem.init_memory(&mut smt);
-
+    
     let mut ctx = RuneContext::new(ip, rmem, rregfile, smt);
 
-    if let Some(ref sym_vars) = *syms {
-        for var in sym_vars {
-            let  _ = match *var {
-                Key::Mem(addr) => ctx.set_mem_as_sym(addr as u64, 64),
+    if let Some(sym_vars) = syms {
+        for (sym, size) in sym_vars.iter() {
+            match *sym {
+                Key::Mem(addr)    => ctx.set_mem_as_sym(addr as u64, *size as usize),
                 Key::Reg(ref reg) => ctx.set_reg_as_sym(reg),
             };
         }
     }
 
-    if let Some(ref const_var) = *consts {
-        for &(ref k, v) in const_var.iter() {
-            let _ = match *k {
-                Key::Mem(addr) => ctx.set_mem_as_const(addr as u64, v, 64),
-                Key::Reg(ref reg) => ctx.set_reg_as_const(reg, v),
+    if let Some(const_vars) = consts {
+        for (key, val) in const_vars.iter() {
+            match *key {
+                Key::Mem(addr)    => ctx.set_mem_as_const(addr as u64, val.0, val.1 as usize),
+                Key::Reg(ref reg) => ctx.set_reg_as_const(reg, val.0),
             };
         }
     }
 
+    // Setting unset registers to zero!
     for register in &lreginfo.reg_info {
         ctx.set_reg_as_const(register.name.clone(), 0);
     }
 
     ctx
+}
+
+// Ideally, this should be implemented for all logics. 
+// But since we are using only bitvecs, we can use this function for now I guess.
+pub fn simplify_constant(ni: NodeIndex, solver: &mut SMTLib2<qf_abv::QF_ABV>) -> u64 {
+    let c = match solver.get_node_info(ni) {
+        &BVOps(Const(x, _)) => x,
+        &BVOps(BvSub) => {
+            let oper     = solver.get_operands(ni);
+            let mut iter = oper.iter();
+
+            let first    = iter.next().unwrap();
+            let second   = iter.next().unwrap();
+
+            simplify_constant(*second, solver) - simplify_constant(*first, solver)
+        },
+        &BVOps(BvAdd) => {
+            let oper     = solver.get_operands(ni);
+            let mut iter = oper.iter();
+
+            let first    = iter.next().unwrap();
+            let second   = iter.next().unwrap();
+
+            simplify_constant(*second, solver) + simplify_constant(*first, solver)
+        },
+        _ => panic!("Unimplemented!"),
+    };
+
+    c
 }

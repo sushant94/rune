@@ -19,7 +19,7 @@ use memory::qword_mem::QWordMemory;
 use regstore::regstore::{RegStore, RegEntry, RegStoreAPI};
 use regstore::regfile::RuneRegFile;
 
-use utils::utils::{Key, new_ctx};
+use utils::utils::Key;
 use context::context::{Context, ContextAPI, Evaluate, RegisterRead, RegisterWrite, MemoryRead, MemoryWrite};
 
 #[derive(Clone, Debug)]
@@ -33,8 +33,6 @@ pub struct RuneContext<Mem, Reg>
     mem: Mem,
     e_old: Option<NodeIndex>,
     e_cur: Option<NodeIndex>,
-    // FIXME: Move syms out. 
-    pub syms: HashMap<String, NodeIndex>,
 }
 
 impl<Mem, Reg> Context for RuneContext<Mem, Reg>
@@ -88,7 +86,7 @@ impl<Mem, Reg> Context for RuneContext<Mem, Reg>
     }
 
     fn var_named<T: AsRef<str>>(&self, var: T) -> Option<NodeIndex> {
-        self.syms.get(var.as_ref()).cloned()
+        None
     }
 }
 
@@ -168,7 +166,6 @@ where Mem: Memory<VarRef=NodeIndex>,
       Reg: RegStore<VarRef=NodeIndex> + RegStoreAPI
 {
     fn set_reg_as_const<T: AsRef<str>>(&mut self, reg: T, val: u64) -> NodeIndex {
-        // Assert that the register is not currently set/defined.
         if let Some(cval) = self.regstore.get_reg_ref(reg.as_ref()) {
             cval
         } else {
@@ -179,12 +176,10 @@ where Mem: Memory<VarRef=NodeIndex>,
     }
 
     fn set_reg_as_sym<T: AsRef<str>>(&mut self, reg: T) -> NodeIndex {
-        // Assert that the register is not currently set/defined.
-        assert!(self.regstore.get_reg_ref(reg.as_ref()).is_none());
-
         let sym = self.solver.new_var(Some(reg.as_ref()), qf_abv::bv_sort(64));
         self.regstore.set_reg(reg.as_ref(), sym);
-        self.syms.insert(reg.as_ref().to_owned(), sym);
+        // self.syms.insert(reg.as_ref().to_owned(), sym);
+        
         sym
     }
 
@@ -203,12 +198,13 @@ where Mem: Memory<VarRef=NodeIndex>,
         // Assert that memory var is in chunks of 8
         assert_eq!(write_size%8, 0, "Write size is not divisible by 8!");
 
-        let key = format!("mem_{}_{}", addr, write_size);
+        let key = format!("mem_{}_{}", addr, write_size/8);
         let sym = self.solver.new_var(Some(&key), qf_abv::bv_sort(write_size));
         let addr = self.define_const(addr, 64);
 
         self.mem_write(addr, sym, write_size);
-        self.syms.insert(key, sym);
+        // self.syms.insert(key, sym);
+        
         sym
     }
 
@@ -242,11 +238,9 @@ where Mem: Memory,
             solver: solver,
             e_old: None,
             e_cur: None,
-            syms: HashMap::new(),
         }
     }
 }
-
 
 mod test {
     use super::*;
@@ -264,7 +258,7 @@ mod test {
 
     use r2api::structs::Endian;
 
-//    #[test]
+    // #[test]
     fn teting_memory_my_dude() {
         let mut lreginfo = Default::default();
         let regstore = RuneRegFile::new(&mut lreginfo);
@@ -276,207 +270,3 @@ mod test {
         let mut ctx = RuneContext::new(Some(0x9000), mem, regstore, smt);
     }
 }
-
-    /*
-    #[test]
-    fn ctx_reg_write() {
-        let mut lreginfo = Default::default();
-        let mut ctx = utils::new_ctx(None, &None, &None, &mut lreginfo);
-        let const_8 = ctx.define_const(8, 64);
-
-        // Test setting rax to 8
-        ctx.reg_write("rax", const_8);
-        assert_eq!(ctx.reg_read("rax"), const_8);
-    }
-
-    fn solver() -> z3::Z3 {
-        Default::default()
-    }
-
-    #[test]
-    fn ctx_reg_read() {
-        let mut lreginfo = Default::default();
-        let mut ctx = utils::new_ctx(None, &None, &None, &mut lreginfo);
-
-        ctx.set_reg_as_sym("rax");
-
-        // We set rax to be some value, and add constraints on sub-registers of rax. if
-        // all is
-        // well, these constraints will be consistent and check-sat will return a sat.
-        let deadbeef = 0xdeadbeefdeadbeef;
-        let const_deadbeef = ctx.define_const(deadbeef, 64);
-        let const_deadbeef_32 = ctx.define_const(deadbeef & 0xffffffff, 32);
-        let const_deadbeef_16 = ctx.define_const(deadbeef & 0xffff, 16);
-        let const_deadbeef_8 = ctx.define_const(deadbeef & 0xff, 8);
-
-        let rax = ctx.reg_read("rax");
-        let eax = ctx.reg_read("eax");
-        let ax = ctx.reg_read("ax");
-        let al = ctx.reg_read("al");
-
-        ctx.eval(core::OpCodes::Cmp, &[rax, const_deadbeef]);
-        ctx.eval(core::OpCodes::Cmp, &[eax, const_deadbeef_32]);
-        ctx.eval(core::OpCodes::Cmp, &[ax, const_deadbeef_16]);
-        ctx.eval(core::OpCodes::Cmp, &[al, const_deadbeef_8]);
-
-        let mut z3: z3::Z3 = Default::default();
-        assert!(ctx.solver.check_sat(&mut z3));
-    }
-
-    #[test]
-    fn ctx_reg_solve_simple() {
-        let mut lreginfo = Default::default();
-        let mut ctx = utils::new_ctx(None, &None, &None, &mut lreginfo);
-        // Set rdi and rsi as symbolic
-        ctx.set_reg_as_sym("rdi");
-        ctx.set_reg_as_sym("rsi");
-
-        let const_deadbeef = ctx.define_const(0x0000dead0000beef, 64);
-        let const_0_32 = ctx.define_const(0, 32);
-        let const_0_64 = ctx.define_const(0, 64);
-
-        // Assert that rdi ^ rsi = 0x0000dead0000beef.
-        //             edi = 0
-        let rdi = ctx.reg_read("rdi");
-        let edi = ctx.reg_read("edi");
-        let rsi = ctx.reg_read("rsi");
-        let rdi_rsi = ctx.eval(bitvec::OpCodes::BvXor, &[rdi, rsi]);
-
-        ctx.eval(bitvec::OpCodes::BvUGt, &[rdi, const_0_64]);
-        ctx.eval(bitvec::OpCodes::BvULt, &[rdi, const_deadbeef]);
-        ctx.eval(core::OpCodes::Cmp, &[rdi_rsi, const_deadbeef]);
-        ctx.eval(core::OpCodes::Cmp, &[edi, const_0_32]);
-
-        let result = {
-            let mut z3: z3::Z3 = Default::default();
-            ctx.solve(&mut z3)
-        };
-
-        assert_eq!(result[&rdi], 0xdead00000000);
-        assert_eq!(result[&rsi], 0xbeef);
-    }
-
-    #[test]
-    fn ctx_mem_read_write() {
-        let mut lreginfo = Default::default();
-        let mut ctx = utils::new_ctx(None, &None, &None, &mut lreginfo);
-
-        ctx.set_reg_as_sym("rax");
-
-        let rax = ctx.reg_read("rax");
-        let addr = ctx.define_const(0xbadcafe, 64);
-        let const_deadbeef = ctx.define_const(0xdeadbeef, 64);
-
-        ctx.mem_write(addr, rax, 64);
-
-        let rbx = ctx.mem_read(addr, 64);
-        ctx.eval(core::OpCodes::Cmp, &[rbx, const_deadbeef]);
-
-        let result = ctx.solve(&mut solver());
-        assert_eq!(result[&rax], 0xdeadbeef);
-    }
-
-    #[test]
-    fn ctx_mem_sym_read_write() {
-        let mut lreginfo = Default::default();
-        let mut ctx = utils::new_ctx(None, &None, &None, &mut lreginfo);
-
-        ctx.set_mem_as_sym(0xff41, 64);
-        ctx.set_mem_as_sym(0xfe41, 64);
-
-        let addr = ctx.define_const(0xff41, 64);
-        let addr_ = ctx.define_const(0xfe41, 64);
-
-        let rax = ctx.mem_read(addr, 64);
-        ctx.reg_write("rax", rax);
-        let rbx = ctx.mem_read(addr_, 64);
-        ctx.reg_write("rbx", rbx);
-
-        let eax = ctx.reg_read("eax");
-        let ebx = ctx.reg_read("ebx");
-        let const_deadbeef = ctx.define_const(0xdeadbeef, 32);
-        let const_badcafe = ctx.define_const(0xbadcafe, 32);
-
-        ctx.eval(core::OpCodes::Cmp, &[eax, const_deadbeef]);
-        ctx.eval(core::OpCodes::Cmp, &[ebx, const_badcafe]);
-
-        ctx.solve(&mut solver());
-        // TODO: Test does not assert correctness yet.
-    }
-
-    #[test]
-    fn ctx_test_ip() {
-        let mut lreginfo = Default::default();
-        let mut ctx = utils::new_ctx(None, &None, &None, &mut lreginfo);
-
-        ctx.set_ip(0xbadcafe);
-        assert_eq!(ctx.ip(), 0xbadcafe);
-
-        ctx.increment_ip(4);
-        assert_eq!(ctx.ip(), 0xbadcafe + 4);
-    }
-
-    #[test]
-    fn ctx_test_alias() {
-        let mut lreginfo = Default::default();
-        let mut ctx = utils::new_ctx(None, &None, &None, &mut lreginfo);
-        assert_eq!(ctx.alias_of("rip".to_owned()), Some("PC".to_owned()));
-    }
-
-    #[test]
-    #[should_panic]
-    fn ctx_unset_access_esil_old() {
-        let mut lreginfo = Default::default();
-        let mut ctx = utils::new_ctx(None, &None, &None, &mut lreginfo);
-        ctx.e_old();
-    }
-
-    #[test]
-    #[should_panic]
-    fn ctx_unset_access_esil_cur() {
-        let mut lreginfo = Default::default();
-        let mut ctx = utils::new_ctx(None, &None, &None, &mut lreginfo);
-        ctx.e_cur();
-    }
-
-    #[test]
-    fn ctx_access_esil_old_cur() {
-        let mut lreginfo = Default::default();
-        let mut ctx = utils::new_ctx(None, &None, &None, &mut lreginfo);
-        let const_8 = ctx.define_const(8, 64);
-        let const_32 = ctx.define_const(32, 64);
-
-        // Set rax to 8.
-        ctx.reg_write("rax", const_8);
-        ctx.reg_write("rbx", const_32);
-
-        // Get handles to rax and rbx
-        let rax = ctx.reg_read("rax");
-        let rbx = ctx.reg_read("rbx");
-
-        // rax = rax + rbx
-        let rax_rbx = ctx.eval(bitvec::OpCodes::BvAdd, &[rax, rbx]);
-        ctx.reg_write("rax", rax_rbx);
-
-        // Check
-        assert_eq!(ctx.e_old(), const_8);
-        assert_eq!(ctx.e_cur(), rax_rbx);
-    }
-
-    #[test]
-    #[should_panic]
-    fn ctx_read_before_set() {
-        let mut lreginfo = Default::default();
-        let mut ctx = utils::new_ctx(None, &None, &None, &mut lreginfo);
-        ctx.reg_read("zf");
-    }
-
-    #[test]
-    #[should_panic]
-    fn ctx_invalid_reg() {
-        let mut lreginfo = Default::default();
-        let mut ctx = utils::new_ctx(None, &None, &None, &mut lreginfo);
-        ctx.reg_read("asassa");
-    }
-}
-*/

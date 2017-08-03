@@ -44,6 +44,7 @@ pub mod explorer {
     pub mod dfs;
     pub mod bfs;
     pub mod interactive;
+    pub mod directed;
 }
 
 pub mod engine {
