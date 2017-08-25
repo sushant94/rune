@@ -20,6 +20,8 @@ highly valued at this stage of the project!
 __NOTE__: I am actively collecting suggestions for changes to the API. Please
 open issues for the same.
 
+### Note: This project is actively being developed over at [radare/rune](http://github.com/radare/rune).
+
 ## Asciinema
 [![asciicast](https://asciinema.org/a/1zvz0s5wpm2gx38hp5tw6za4m.png)](https://asciinema.org/a/1zvz0s5wpm2gx38hp5tw6za4m)
 

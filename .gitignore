@@ -1,4 +1,5 @@
 target
+bins/*
 Cargo.lock
 *.swp
 *.swo

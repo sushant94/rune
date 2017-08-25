@@ -8,123 +8,122 @@ extern crate libsmt;
 extern crate docopt;
 extern crate rustc_serialize;
 extern crate r2pipe;
+extern crate r2api;
 
 mod interact;
 mod console;
 
 use std::process::exit;
 use docopt::Docopt;
-use std::collections::HashMap;
-use rune::context::utils;
+
+use rune::utils::utils::{Key, ValType, SAssignment};
+use rune::utils::state::RInitialState;
 use rune::explorer::explorer::PathExplorer;
+use rune::explorer::interactive::Command;
 use rune::engine::rune::Rune;
 use rune::engine::engine::Engine;
+
 use interact::InteractiveExplorer;
+use console::Console;
+
 use r2pipe::r2::R2;
-use rune::stream::InstructionStream;
+use r2api::api_trait::R2Api;
 
 static USAGE: &'static str = "
 runec. Interactive console for rune.
+
 Usage:
-  runec [options] [<file>]
+  runec [-p <path>] <file>
+  runec (-h | --help)
 
 Options:
-  -e --end=<end_addr>                    Address to end emulation at.
-  -s --start=<start_addr>                Address to start emulation at.
-  --const=<const_vars>                   Key:Value pairs.
-                                         Example: --const=rbp:0x1000,rsp:0x1100
-  --sym=<sym_vars>                       Registers/Memory address to be set as symbolic.
-                                         Example: --sym=rsi,rdi,0x1000
-  -b --break=<bp_list>                   Set breakpoints at addresses.
-  --reset                                Set all unset registers (symbolic / constant) to 0
-  --save                                 Save current configuration to a r2 project
-  -p --project=<project>                 Load a previously saved r2 project
   -h --help                              Show this screen.
+  -p                                     Load a previous configuration of state
 ";
 
 #[derive(Debug, Clone, RustcDecodable)]
 struct Args {
     flag_help: bool,
-    flag_break: Option<String>,
-    flag_sym: Option<String>,
-    flag_const: Option<String>,
-    flag_start: Option<u64>,
-    flag_end: Option<u64>,
-    flag_reset: bool,
-    flag_save: bool,
-    flag_project: Option<String>,
+    flag_project: bool,
+    arg_path: Option<String>,
     arg_file: Option<String>,
 }
 
 fn main() {
-    let args: Args = Docopt::new(USAGE).and_then(|d| d.decode()).unwrap_or_else(|e| e.exit());
+    let args = Docopt::new(USAGE)
+                      .and_then(|dopt| dopt.parse())
+                      .unwrap_or_else(|e| e.exit());
 
-    if args.flag_help {
+    if args.get_bool("-h") {
         println!("{}", USAGE);
         exit(0);
     }
 
-    let mut stream = R2::new(args.arg_file).expect("Unable to spawn r2");
+    let mut stream = R2::new(Some(args.get_str("<file>"))).expect("Unable to spawn r2");
     stream.init();
 
-    let sym_vars = args.flag_sym
-                       .unwrap_or_default()
-                       .split(',')
-                       .map(|x| x.to_owned())
-                       .collect::<Vec<String>>();
+    let mut lreginfo = stream.reg_info().expect("Unable to retrieve register info.");
 
-    let const_vars = args.flag_const
-                         .unwrap_or_default()
-                         .split(',')
-                         .map(|x_| {
-                             let x = x_.to_owned();
-                             let mut substr = x.split(':').take(2);
-                             (substr.next().unwrap().to_owned(),
-                              {
-                                 let v_str = substr.next().unwrap().to_owned();
-                                 if v_str.starts_with("0x") {
-                                     u64::from_str_radix(&v_str[2..], 16)
-                                         .expect("Invalid integer in base16")
-                                 } else {
-                                     u64::from_str_radix(&v_str, 10)
-                                         .expect("Invalid integer in base10")
-                                 }
-                             })
-                         })
-                         .collect::<HashMap<_, _>>();
+    let c: Console = Default::default();
+    let mut is: RInitialState = RInitialState::new(); 
 
-    let mut breakpoints = args.flag_break
-                              .unwrap_or_default()
-                              .split(',')
-                              .map(|x| {
-                                  let b = x.to_owned();
-                                  if b.starts_with("0x") {
-                                      u64::from_str_radix(&b[2..], 16)
-                                          .expect("Invalid base16 integer")
-                                  } else {
-                                      u64::from_str_radix(&b, 10).expect("Invalid base10 integer")
-                                  }
-                              })
-                              .collect::<Vec<_>>();
-
-    if let Some(addr) = args.flag_end {
-        breakpoints.push(addr);
+    if args.get_bool("-p") {
+        let path = args.get_str("<path>");
+        is = RInitialState::import_from_json(path);
     }
 
-    // Load 'rune' flags from r2
+    loop {
+        match c.read_command()[0] {
+            Command::Run => {
+                // NOTE: This allows us to use any explorer here.
+                let mut explorer = InteractiveExplorer::new();
+                explorer.bp = is.get_breakpoints();
 
+                let ctx = is.create_context(&mut stream);
 
-    // Load breakpoints and start address from r2
-    // 1. Load start addresses
-    // let start_address = if args.flag_start.is_none() {
-    // } else {
-    // args.flag_start.unwrap()
-    // };
-
-    let ctx = utils::new_ctx(args.flag_start, Some(sym_vars), Some(const_vars));
-    let mut explorer = InteractiveExplorer::new();
-    explorer.bp = breakpoints;
-
-    let mut rune = Rune::new(ctx, explorer, stream);
-    rune.run().expect("Rune Error:");
+                let mut rune = Rune::new(ctx, explorer, stream);
+                rune.run().expect("Rune Error!");
+                break;
+            },
+            Command::Help => {
+                c.print_help();
+                continue;
+            },
+            Command::Save => {
+                is.write_to_json();
+                continue;
+            },
+            Command::DebugState => {
+                // TODO: It would be better if we pretty print the debug message.
+                c.print_info(&is.get_string());
+                continue;
+            },
+            Command::SetContext(SAssignment { lvalue: Key::Mem(val),
+                                              rvalue: ValType::Break }) => {
+                is.add_breakpoint(val as u64);
+            },
+            Command::SetContext(SAssignment { lvalue: ref val, 
+                                              rvalue: ValType::Symbolic }) => {
+                is.add_sym(val.clone());
+            },
+            Command::SetContext(SAssignment { lvalue: ref key,
+                                              rvalue: ValType::Concrete(val) }) => {
+                // If the register to be set is rip, we infer that the user is setting 
+                // their start address
+                if *key == Key::Reg("rip".to_owned()) {
+                    is.set_start_addr(val as u64);
+                } else {
+                    is.add_const((key.clone(), val as u64));
+                }
+            },
+            Command::Exit => {
+                c.print_info("Thanks for using rune!");
+                exit(0);
+            },
+            Command::Invalid => {
+                c.print_error("Invalid command. Please try again.");
+            },
+            _ => continue,
+        }
+    }
 }

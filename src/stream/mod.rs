@@ -11,8 +11,9 @@ use std::fs::File;
 use rustc_serialize::{Decodable};
 use rustc_serialize::json;
 
-use r2pipe::structs::LOpInfo;
 use r2pipe::r2::R2;
+use r2api::structs::LOpInfo;
+use r2api::api_trait::R2Api;
 
 pub trait InstructionStream {
     type Output: Debug + Clone;
@@ -41,7 +42,7 @@ impl InstructionStream for R2 {
 // This is useful for tests, debug and other smaller applications.
 // Maintains a HashMap from address to LOpInfo that it should provide
 // when asked for that address.
-#[derive(Clone, Debug, RustcDecodable)]
+#[derive(Clone, Debug, RustcDecodable, Default)]
 pub struct FileStream<I, Op>
     where I: Debug + Clone + Decodable + Hash + PartialEq + Eq,
           Op: Debug + Clone + Decodable

@@ -2,7 +2,6 @@
 use std::collections::VecDeque;
 
 use explorer::explorer::{PathExplorer};
-use stream::{InstructionStream};
 use engine::rune::RuneControl;
 use context::context::{Context, RegisterRead};
 
@@ -28,6 +27,7 @@ impl<C: Context> SavedState<C> {
 }
 
 /// An explorer that traverses the program states in a Breadth First Order.
+#[derive(Default)]
 pub struct BFSExplorer<Ctx: Context> {
     /// Breadth First Queue
     queue: VecDeque<SavedState<Ctx>>,

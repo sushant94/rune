@@ -1,71 +1,19 @@
 //! `PathExplorer` that allows interactive exploration
 
 use rune::explorer::explorer::PathExplorer;
+use rune::explorer::interactive::Command;
 use rune::context::rune_ctx::RuneContext;
-use rune::engine::rune::RuneControl;
 use rune::context::context::{Context, Evaluate, MemoryRead, RegisterRead};
+use rune::engine::rune::RuneControl;
+use rune::memory::seg_mem::SegMem;
+use rune::regstore::regfile::RuneRegFile;
 
 use libsmt::theories::{bitvec, core};
 use libsmt::logics::qf_abv::QF_ABV_Fn;
 use libsmt::backends::z3;
 use console::Console;
 
-const HELP: &'static str = "runec help menu:
-
-Branch Follow Commands:
-  T     Follow `True` branch
-  F     Follow `False` branch
-
-Interpretter Commands:
-  C     Continue Execution
-  S     Single Step Instruction
-  D     Print Debug information
-  ?     Add Assertion
-  Q     Query Constraint Solver
-  X     Add safety assertions
-  H     Print Help Menu
-";
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Command {
-    FollowTrue,
-    FollowFalse,
-    Continue,
-    Step,
-    Debug,
-    Assertion,
-    Query,
-    Help,
-    Safety,
-    Invalid,
-}
-
-impl Command {
-    pub fn is_invalid(&self) -> bool {
-        *self == Command::Invalid
-    }
-
-    pub fn is_valid(&self) -> bool {
-        !self.is_invalid()
-    }
-}
-
-impl From<char> for Command {
-    fn from(c: char) -> Command {
-        match c {
-            'T' => Command::FollowTrue,
-            'F' => Command::FollowFalse,
-            'C' => Command::Continue,
-            'S' => Command::Step,
-            'D' => Command::Debug,
-            '?' => Command::Assertion,
-            'Q' => Command::Query,
-            'H' => Command::Help,
-            'X' => Command::Safety,
-            _ => Command::Invalid,
-        }
-    }
-}
+use std::process;
 
 #[derive(Debug, Clone, Default)]
 pub struct InteractiveExplorer {
@@ -77,12 +25,8 @@ pub struct InteractiveExplorer {
 }
 
 impl InteractiveExplorer {
-    pub fn help(&self) {
-        self.console.print_info(HELP);
-    }
-
     // Adds Assertions for safety.
-    pub fn safety(&self, ctx: &mut RuneContext) {
+    pub fn safety(&self, ctx: &mut RuneContext<SegMem, RuneRegFile>) {
         let rbp = ctx.reg_read("rbp");
         let const_8 = ctx.define_const(8, 64);
         let ret_addr = ctx.eval(bitvec::OpCodes::BvAdd, vec![rbp, const_8]);
@@ -92,28 +36,29 @@ impl InteractiveExplorer {
         ctx.eval(core::OpCodes::Cmp, vec![mem_at_addr, const_trash]);
     }
 
-    pub fn print_debug(&self, ctx: &RuneContext) {
+    pub fn print_debug(&self, ctx: &RuneContext<SegMem, RuneRegFile>) {
         self.console.print_info("DEBUG");
         self.console.print_info(&format!("Constraints:\n{}", ctx.solver.generate_asserts()));
     }
 
-    pub fn query_constraints(&self, ctx: &mut RuneContext) {
+    pub fn query_constraints(&self, ctx: &mut RuneContext<SegMem, RuneRegFile>) {
         let mut z3: z3::Z3 = Default::default();
         let result = ctx.solve(&mut z3);
 
+        println!("{:?}", result);
         self.console.print_success("Results:");
+
+        /*
         for (k, v) in &ctx.syms {
             if let Some(res) = result.get(v) {
                 self.console.print_success(&format!("{} = {:#x}", k, res))
             }
         }
+        */
     }
 
-    pub fn add_assertion(&self, ctx: &mut RuneContext) {
-        self.console.print_info("Adding assertions");
-        self.console.print_info("(operation) (register) (register/constant in hex)");
-        self.console.print_info("Valid Operations: =, >, <, <=, >=");
-
+    pub fn add_assertion(&self, ctx: &mut RuneContext<SegMem, RuneRegFile>) {
+        self.console.print_assertion_help();
         if let Ok(ref line) = self.console.readline() {
             // Format for adding assertions:
             // (operation) (register) (register/constant in hex)
@@ -158,7 +103,7 @@ impl InteractiveExplorer {
 
 impl PathExplorer for InteractiveExplorer {
     type C = RuneControl;
-    type Ctx = RuneContext;
+    type Ctx = RuneContext<SegMem, RuneRegFile>;
 
     fn new() -> InteractiveExplorer {
         InteractiveExplorer {
@@ -176,29 +121,31 @@ impl PathExplorer for InteractiveExplorer {
                 self.single_step = match self.console.read_command()[0] {
                     Command::Step => true,
                     Command::Continue => false,
-                    Command::Debug => {
+                    Command::DebugQuery => {
                         self.print_debug(ctx);
                         continue;
-                    }
+                    },
                     Command::Assertion => {
                         self.add_assertion(ctx);
                         continue;
-                    }
+                    },
                     Command::Query => {
                         self.query_constraints(ctx);
                         continue;
-                    }
+                    },
                     Command::Help => {
-                        self.help();
+                        self.console.print_help();
                         continue;
-                    }
+                    },
                     Command::Safety => {
                         self.safety(ctx);
                         continue;
-                    }
-                    _ => {
-                        continue;
-                    }
+                    },
+                    Command::Exit => {
+                        self.console.print_info("Thanks for using rune!");
+                        process::exit(1);
+                    },
+                    _ => continue,
                 };
                 break;
             }
