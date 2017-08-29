@@ -52,6 +52,10 @@ all code will be dual-licensed under MIT and Apache Version 2.0,
 To make reviews easier please ensure that the code adhers to the standard
 rust style of coding.
 
+### Update Notice
+
+This project is being actively developed over at [radare/rune](https://github.com/radare/rune).
+
 ## Project Milestones and Roadmap
 Please check the [Issues](https://github.com/sushant94/rune/issues)
 
